@@ -32,8 +32,6 @@
       .channel-toast { position: absolute; top: 30px; right: 30px; background: rgba(0, 0, 0, 0.9); border: 2px solid #333; color: #ffffff; padding: 12px 28px; border-radius: 6px; font-size: 18px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; z-index: 10010; box-shadow: 0 6px 20px rgba(0,0,0,0.8); letter-spacing: 0.5px; }
       .channel-toast.show { opacity: 1; }
 
-      .caption-overlay { position: absolute; bottom: 105px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.9); color: #ffffff; padding: 12px 26px; border-radius: 6px; font-size: 20px; font-weight: 500; text-align: center; max-width: 85%; display: none; z-index: 9999; pointer-events: none; text-shadow: 2px 2px 4px #000; border-bottom: 4px solid #44ff44; box-shadow: 0 4px 15px rgba(0,0,0,0.7); line-height: 1.4; letter-spacing: 0.4px; }
-
       /* --- CONTROLS --- */
       .custom-controls-bar { position: absolute; bottom: 0; left: 0; width: 100%; background: linear-gradient(transparent, rgba(0, 0, 0, 0.95)); padding: 20px 30px; display: flex; justify-content: space-between; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 10000; }
       .custom-controls-bar.show { opacity: 1; pointer-events: auto; }
@@ -51,12 +49,11 @@
       .bar-arrow-btn { background: none; border: none; color: #ffffff; font-size: 18px; cursor: pointer; outline: none; transition: transform 0.1s; }
       .bar-arrow-btn:hover { color: #aaaaaa; transform: scale(1.15); }
 
-      .options-menu { position: absolute; bottom: 45px; right: 0; background: #111; border: 1px solid #222; border-radius: 8px; padding: 6px 0; min-width: 200px; display: none; flex-direction: column; z-index: 10005; box-shadow: 0 4px 15px rgba(0,0,0,0.8); }
+      .options-menu { position: absolute; bottom: 45px; right: 0; background: #111; border: 1px solid #222; border-radius: 8px; padding: 6px 0; min-width: 160px; display: none; flex-direction: column; z-index: 10005; box-shadow: 0 4px 15px rgba(0,0,0,0.8); }
       .options-menu.active { display: flex; }
       .menu-item { background: none; border: none; color: #ccc; padding: 10px 18px; text-align: left; font-size: 14px; cursor: pointer; width: 100%; transition: background 0.2s; }
       .menu-item:hover { background: #222; color: #fff; }
       .menu-item.active-speed { color: #fff; font-weight: 600; background: #1a1a1a; }
-      .menu-item.active-caption { color: #44ff44; font-weight: 600; background: #1a1a1a; }
 
       /* --- SIDEBAR --- */
       .sidebar { width: 29%; background: #0a0a0a; display: flex; flex-direction: column; border-left: 1px solid #111; position: relative; height: 100%; overflow: hidden; padding-right: 55px; }
@@ -94,22 +91,25 @@
         
         .header { height: 60px; padding: 5px 15px; justify-content: center; }
         .header h1 { font-size: 20px; }
-        .live-clock-container { display: none !important; } /* Hidden on mobile */
+        .live-clock-container { display: none !important; }
         
         .main-container { flex-direction: column; height: auto; overflow: visible; display: block; }
-        
         .viewport-section { width: 100% !important; height: 35vh; min-height: 250px; position: sticky; top: 0; z-index: 999; }
         
-        .sidebar { width: 100% !important; height: auto; border-left: none; padding-right: 15px; overflow: visible; }
+        /* Fixed mobile sidebar right-side gap */
+        .sidebar { width: 100% !important; height: auto; border-left: none; padding-right: 0 !important; overflow: visible; }
         
-        .scroll-controls-side { display: none; } /* Hide big scroll buttons on phone */
-        .asset-grid { padding: 0 15px 30px 15px; overflow-y: visible; height: auto; }
-        .item-card { width: calc(50% - 5px); height: 110px; } /* 2 channels per row on mobile */
+        .scroll-controls-side { display: none; } 
+        
+        .category-container { padding: 10px 15px; }
+        
+        /* Adjusted grid to perfectly fit screen horizontally */
+        .asset-grid { padding: 0 15px 30px 15px !important; overflow-y: visible; height: auto; gap: 10px; justify-content: flex-start; }
+        .item-card { width: calc(50% - 5px) !important; height: 110px; margin: 0; } 
         
         .custom-controls-bar { padding: 10px 15px; }
-        .volume-container { display: none; } /* Save space on mobile */
+        .volume-container { display: none; } 
         .time-display { display: none; } 
-        .caption-overlay { font-size: 14px; padding: 8px 15px; bottom: 80px; width: 90%; }
       }
     </style>
   </head>
@@ -128,9 +128,7 @@
     <div class="main-container">
       <div class="viewport-section" id="viewportSection">
         <video id="main-player" autoplay playsinline></video>
-        
         <div class="channel-toast" id="channelToast">Channel Name</div>
-        <div class="caption-overlay" id="captionOverlay">Connecting AI Subtitle Engine...</div>
 
         <div class="custom-controls-bar" id="customControlsBar">
           <div class="controls-left">
@@ -159,7 +157,6 @@
                 <button class="menu-item" onclick="setSpeed(0.5, this)">0.5x Speed</button>
                 <button class="menu-item active-speed" onclick="setSpeed(1.0, this)">Normal Speed</button>
                 <button class="menu-item" onclick="setSpeed(1.5, this)">1.5x Speed</button>
-                <button class="menu-item" id="captionToggleItem" onclick="toggleAICaptions(this, event)">AI English Captions: OFF</button>
               </div>
             </div>
           </div>
@@ -197,7 +194,6 @@
     <script>
       document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
 
-      // Helper function for Vewd Browser (replaces padStart)
       function padZero(num) {
         return num < 10 ? '0' + num : num;
       }
@@ -221,15 +217,12 @@
       var optionsMenu = document.getElementById("optionsMenu");
       var categoryContainer = document.getElementById("categoryContainer");
       var channelToast = document.getElementById("channelToast");
-      var captionOverlay = document.getElementById("captionOverlay");
       
       var hlsPlayer = null;
       var controlTimer = null;
       var toastTimer = null;
-      var captionTimer = null;
       var initialLoad = true;
       var previousVolume = 1;
-      var aiCaptionsActive = false;
 
       function updatePremiumClock() {
         var canvas = document.getElementById("analogClockCanvas");
@@ -341,7 +334,6 @@
         dHrs = dHrs ? dHrs : 12;
         var strTime = padZero(dHrs) + ':' + padZero(min) + ':' + padZero(sec) + ' ' + ampm;
         
-        // Safety check for mobile where clock is hidden
         var clockDisplay = document.getElementById("liveClock");
         if(clockDisplay) {
             clockDisplay.innerText = day + " " + month + " " + year + " | " + strTime;
@@ -446,18 +438,28 @@
         activeChannel = item;
         if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
 
+        var startPlayback = function() {
+            var playPromise = corePlayer.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(function(error) {
+                    console.log("Autoplay caught on mobile, requires user interaction", error);
+                });
+            }
+        };
+
+        // Added Native Support Check (Fixes mobile playback issue)
         if (typeof Hls !== 'undefined' && Hls.isSupported()) {
           hlsPlayer = new Hls({ lowLatencyMode: true, maxBufferLength: 3, enableWorker: true });
           hlsPlayer.loadSource(item.url);
           hlsPlayer.attachMedia(corePlayer);
-          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, function () { 
-              var playPromise = corePlayer.play();
-              if(playPromise !== undefined) { playPromise.catch(function(){}); }
-          });
+          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, startPlayback);
+        } else if (corePlayer.canPlayType('application/vnd.apple.mpegurl')) {
+          // Native mobile playback fallback (Safari, iOS, Android WebViews)
+          corePlayer.src = item.url;
+          corePlayer.addEventListener('loadedmetadata', startPlayback);
         } else {
           corePlayer.src = item.url;
-          var playPromise2 = corePlayer.play();
-          if(playPromise2 !== undefined) { playPromise2.catch(function(){}); }
+          startPlayback();
         }
 
         var cards = document.querySelectorAll(".item-card");
@@ -467,18 +469,12 @@
               cards[j].className += " active-item";
           }
         }
-        
-        if (aiCaptionsActive) {
-          captionOverlay.innerText = "[AI Core]: Syncing stream audio tracks...";
-          generateDynamicAudioCaptions();
-        }
       }
 
       function changeChannel(step, event) {
         if (event) event.stopPropagation();
         if (!activeChannel || displayItems.length === 0) return;
         
-        // ES5 compliant equivalent of findIndex
         var currentIdx = -1;
         for(var i = 0; i < displayItems.length; i++) {
             if(displayItems[i].url === activeChannel.url) {
@@ -519,70 +515,10 @@
         corePlayer.playbackRate = speedVal;
         var menuItems = document.querySelectorAll(".menu-item");
         for(var i = 0; i < menuItems.length; i++) {
-            if (menuItems[i].id.indexOf("captionToggleItem") === -1) {
-                menuItems[i].className = menuItems[i].className.replace(" active-speed", "");
-            }
+            menuItems[i].className = menuItems[i].className.replace(" active-speed", "");
         }
         element.className += " active-speed";
         optionsMenu.className = optionsMenu.className.replace(" active", "");
-      }
-
-      var languageMatrix = {
-        translation: [
-          "[AI English Translation]: The local administrative authorities are taking measures.",
-          "[AI English Translation]: The special live correspondent reports severe weather developments.",
-          "[AI English Translation]: Public infrastructure planning has received heavy investments this fiscal year.",
-          "[AI English Translation]: Analysts report structural growth across local computational data centers.",
-          "[AI English Translation]: Moving over to national athletics, preparation protocols have started."
-        ],
-        transcription: [
-          "[Live English Transcription]: Coming up next on our direct continuous global broadcast feed.",
-          "[Live English Transcription]: The operational metrics of the defense protocol are shifting right now.",
-          "[Live English Transcription]: [Ambient Background Scoring / Studio Interlude Elements]",
-          "[Live English Transcription]: He drives down the left flank with incredible speed and agility!",
-          "[Live English Transcription]: Ensure to verify all system updates before initializing the sequence."
-        ]
-      };
-      
-      function toggleAICaptions(element, event) {
-        if (event) event.stopPropagation();
-        aiCaptionsActive = !aiCaptionsActive;
-        
-        if (aiCaptionsActive) {
-          element.innerText = "AI English Captions: ON";
-          element.className += " active-caption";
-          captionOverlay.style.display = "block";
-          captionOverlay.innerText = "[AI Core]: Launching audio analysis stream...";
-          generateDynamicAudioCaptions();
-        } else {
-          element.innerText = "AI English Captions: OFF";
-          element.className = element.className.replace(" active-caption", "");
-          captionOverlay.style.display = "none";
-          clearTimeout(captionTimer);
-        }
-        optionsMenu.className = optionsMenu.className.replace(" active", "");
-      }
-
-      function generateDynamicAudioCaptions() {
-        if (!aiCaptionsActive) return;
-        var targetStreamType = "transcription";
-        if (activeChannel) {
-          var categoryTrack = (activeChannel.category || "").toLowerCase();
-          var initialNameTrack = (activeChannel.name || "").toLowerCase();
-          
-          if (categoryTrack.indexOf("bangla") !== -1 || categoryTrack.indexOf("indian") !== -1 || categoryTrack.indexOf("spiritual") !== -1 || initialNameTrack.indexOf("somoy") !== -1 || initialNameTrack.indexOf("jamuna") !== -1 || initialNameTrack.indexOf("sports") !== -1) {
-            targetStreamType = "translation";
-          }
-        }
-        
-        var phrases = languageMatrix[targetStreamType];
-        var parsedTextString = phrases[Math.floor(Math.random() * phrases.length)];
-        
-        captionOverlay.innerText = parsedTextString;
-        captionOverlay.style.opacity = "1";
-        setTimeout(function() { if(aiCaptionsActive) captionOverlay.style.opacity = "0.2"; }, 2500);
-        clearTimeout(captionTimer);
-        captionTimer = setTimeout(generateDynamicAudioCaptions, 3200 + Math.random() * 1200);
       }
 
       corePlayer.addEventListener("play", function() { playPauseIcon.className = "fa-solid fa-pause"; });
@@ -669,12 +605,10 @@
       
       document.addEventListener("keydown", function(e) {
         triggerControlsOverlay();
-        // 427, 33, ChannelUp, 38 = NEXT (Up)
         if (e.keyCode === 427 || e.keyCode === 33 || e.key === 'ChannelUp' || e.keyCode === 38) { 
           e.preventDefault(); 
           changeChannel(1); 
         } 
-        // 428, 34, ChannelDown, 40 = PREVIOUS (Down)
         else if (e.keyCode === 428 || e.keyCode === 34 || e.key === 'ChannelDown' || e.keyCode === 40) { 
           e.preventDefault(); 
           changeChannel(-1); 
