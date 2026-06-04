@@ -6,11 +6,11 @@
     
     <title>CoreAssets Premium TV Engine</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.10/dist/hls.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2=family=Poppins:wght@300;400;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; font-family: \"Poppins\", sans-serif; }
+      * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Poppins", sans-serif; }
       body { background-color: #000000; color: #ffffff; height: 100vh; display: flex; flex-direction: column; overflow: hidden; -webkit-user-select: none; user-select: none; }
       
       /* --- HEADER --- */
@@ -67,7 +67,7 @@
       .scroll-btn { background: #141414; color: #aaa; border: 1px solid #252525; width: 42px; height: 42px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; justify-content: center; align-items: center; transition: all 0.2s; outline: none; box-shadow: 0 4px 10px rgba(0,0,0,0.6); }
       .scroll-btn:hover { background: #252525; color: #fff; border-color: #444; transform: scale(1.08); }
 
-      .category-container { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 5px 15px 15px 15px; background: #0a0a0a; flex-shrink: 0; -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
+      .category-container { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 5px 15px 15px 15px; background: #0a0a0a; flex-shrink: 0; -webkit-overflow-scrolling: touch; scroll-behavior: smooth; position: relative; }
       .category-container::-webkit-scrollbar { display: none; }
       .cat-btn { background: #141414; border: 1px solid #222; color: #888; padding: 6px 16px; border-radius: 20px; font-size: 12px; cursor: pointer; white-space: nowrap; outline: none; transition: all 0.15s; }
       .cat-btn.active { background: #ffffff; color: #000000; border-color: #ffffff; font-weight: 600; }
@@ -84,28 +84,19 @@
       .item-card.active-item span { color: #000000 !important; font-weight: 600 !important; }
       .item-card.active-item img { -webkit-filter: brightness(0); filter: brightness(0); }
 
-      /* =========================================
-         MOBILE RESPONSIVE LAYOUT (Stacked) 
-      ========================================= */
+      /* --- MOBILE STACKED LAYOUT --- */
       @media (max-width: 768px) {
         body { overflow-y: auto; display: block; height: auto; }
-        
         .header { height: 60px; padding: 5px 15px; justify-content: center; }
         .header h1 { font-size: 20px; }
         .live-clock-container { display: none !important; }
-        
         .main-container { flex-direction: column; height: auto; overflow: visible; display: block; }
         .viewport-section { width: 100% !important; height: 35vh; min-height: 250px; position: sticky; top: 0; z-index: 999; }
-        
         .sidebar { width: 100% !important; height: auto; border-left: none; padding-right: 0 !important; overflow: visible; }
-        
         .scroll-controls-side { display: none; } 
-        
         .category-container { padding: 10px 15px; }
-        
         .asset-grid { padding: 0 15px 30px 15px !important; overflow-y: visible; height: auto; gap: 10px; justify-content: flex-start; }
         .item-card { width: calc(50% - 5px) !important; height: 110px; margin: 0; } 
-        
         .custom-controls-bar { padding: 10px 15px; }
         .volume-container { display: none; } 
         .time-display { display: none; } 
@@ -193,9 +184,7 @@
     <script>
       document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
 
-      function padZero(num) {
-        return num < 10 ? '0' + num : num;
-      }
+      function padZero(num) { return num < 10 ? '0' + num : num; }
 
       var cacheBuster = new Date().getTime();
       var dataSourceUrl = "https://gist.githubusercontent.com/ayonpaulofficial-bit/0634edaf19b269aba5bf62523cc19e15/raw/sdyt.m3u?cb=" + cacheBuster;
@@ -222,6 +211,32 @@
       var toastTimer = null;
       var initialLoad = true;
       var previousVolume = 1;
+
+      /* Dynamic Category Hover Edge-Scrolling Protocol */
+      var catScrollInterval = null;
+      categoryContainer.addEventListener("mousemove", function(e) {
+        var rect = categoryContainer.getBoundingClientRect();
+        var x = e.clientX - rect.left;
+        var width = rect.width;
+        
+        clearInterval(catScrollInterval);
+        // Right Edge Hover Line Trigger (Within 80px from right)
+        if (x > width - 80) {
+          catScrollInterval = setInterval(function() {
+            categoryContainer.scrollLeft += 6;
+          }, 10);
+        } 
+        // Left Edge Hover Line Trigger (Within 80px from left)
+        else if (x < 80) {
+          catScrollInterval = setInterval(function() {
+            categoryContainer.scrollLeft -= 6;
+          }, 10);
+        }
+      });
+
+      categoryContainer.addEventListener("mouseleave", function() {
+        clearInterval(catScrollInterval);
+      });
 
       function updatePremiumClock() {
         var canvas = document.getElementById("analogClockCanvas");
@@ -376,9 +391,7 @@
         for (var i = 0; i < buttons.length; i++) {
             buttons[i].className = buttons[i].className.replace(" active", "");
         }
-        if (element) {
-            element.className += " active";
-        }
+        if (element) { buttons.className += " active"; }
         document.getElementById("searchInput").value = "";
         displayItems = [];
         for (var j = 0; j < masterItems.length; j++) {
@@ -394,11 +407,8 @@
         var cards = document.querySelectorAll(".item-card");
         for (var i = 0; i < displayItems.length; i++) {
           if (cards[i]) {
-            if (displayItems[i].name.toLowerCase().indexOf(query) !== -1) {
-                cards[i].style.display = "flex";
-            } else {
-                cards[i].style.display = "none";
-            }
+            if (displayItems[i].name.toLowerCase().indexOf(query) !== -1) { cards[i].style.display = "flex"; } 
+            else { cards[i].style.display = "none"; }
           }
         }
       }
@@ -412,22 +422,14 @@
           card.className = "item-card" + extraClass;
           
           var innerHTMLStr = "";
-          if(item.logo) {
-            innerHTMLStr = '<img src="' + item.logo + '" onerror="this.style.display=\'none\'"><span>' + item.name + '</span>';
-          } else {
-            innerHTMLStr = '<span>' + item.name + '</span>';
-          }
+          if(item.logo) { innerHTMLStr = '<img src="' + item.logo + '" onerror="this.style.display=\'none\'"><span>' + item.name + '</span>'; } 
+          else { innerHTMLStr = '<span>' + item.name + '</span>'; }
           card.innerHTML = innerHTMLStr;
           
-          (function(currentItem) { 
-              card.onclick = function() { streamSource(currentItem); }; 
-          })(item);
+          (function(currentItem) { card.onclick = function() { streamSource(currentItem); }; })(item);
           assetGrid.appendChild(card);
         }
-        if (initialLoad && displayItems.length > 0) { 
-            initialLoad = false; 
-            streamSource(displayItems[0]); 
-        }
+        if (initialLoad && displayItems.length > 0) { initialLoad = false; streamSource(displayItems[0]); }
       }
 
       function scrollGrid(dir) { assetGrid.scrollTop += dir * 250; }
@@ -437,16 +439,17 @@
         activeChannel = item;
         if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
 
+        /* Secure Link Mixed Content Dynamic Bypass Engine */
+        var targetUrl = item.url;
+        if (window.location.protocol === 'https:' && targetUrl.indexOf('http://') === 0) {
+          targetUrl = targetUrl.replace('http://', 'https://');
+        }
+
         var startPlayback = function() {
             var playPromise = corePlayer.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(function(error) {
-                    console.log("Autoplay context interception handled safely.", error);
-                });
-            }
+            if (playPromise !== undefined) { playPromise.catch(function(error) {}); }
         };
 
-        /* Ultra-Fast Instant Load Latency Tweak */
         if (typeof Hls !== 'undefined' && Hls.isSupported()) {
           hlsPlayer = new Hls({ 
             lowLatencyMode: true, 
@@ -455,23 +458,21 @@
             liveSyncDurationCount: 1,
             enableWorker: true 
           });
-          hlsPlayer.loadSource(item.url);
+          hlsPlayer.loadSource(targetUrl);
           hlsPlayer.attachMedia(corePlayer);
           hlsPlayer.on(Hls.Events.MANIFEST_PARSED, startPlayback);
         } else if (corePlayer.canPlayType('application/vnd.apple.mpegurl')) {
-          corePlayer.src = item.url;
+          corePlayer.src = targetUrl;
           corePlayer.addEventListener('loadedmetadata', startPlayback);
         } else {
-          corePlayer.src = item.url;
+          corePlayer.src = targetUrl;
           startPlayback();
         }
 
         var cards = document.querySelectorAll(".item-card");
         for (var j = 0; j < cards.length; j++) {
           cards[j].className = cards[j].className.replace(" active-item", "");
-          if (displayItems[j] && displayItems[j].url === item.url) {
-              cards[j].className += " active-item";
-          }
+          if (displayItems[j] && displayItems[j].url === item.url) { cards[j].className += " active-item"; }
         }
       }
 
@@ -481,12 +482,8 @@
         
         var currentIdx = -1;
         for(var i = 0; i < displayItems.length; i++) {
-            if(displayItems[i].url === activeChannel.url) {
-                currentIdx = i;
-                break;
-            }
+            if(displayItems[i].url === activeChannel.url) { currentIdx = i; break; }
         }
-
         if (currentIdx !== -1) {
           var targetIdx = (currentIdx + step + displayItems.length) % displayItems.length;
           streamSource(displayItems[targetIdx]);
@@ -508,19 +505,14 @@
 
       function toggleOptionsMenu(event) {
         event.stopPropagation();
-        if(optionsMenu.className.indexOf("active") !== -1) {
-            optionsMenu.className = optionsMenu.className.replace(" active", "");
-        } else {
-            optionsMenu.className += " active";
-        }
+        if(optionsMenu.className.indexOf("active") !== -1) { optionsMenu.className = optionsMenu.className.replace(" active", ""); } 
+        else { optionsMenu.className += " active"; }
       }
 
       function setSpeed(speedVal, element) {
         corePlayer.playbackRate = speedVal;
         var menuItems = document.querySelectorAll(".menu-item");
-        for(var i = 0; i < menuItems.length; i++) {
-            menuItems[i].className = menuItems[i].className.replace(" active-speed", "");
-        }
+        for(var i = 0; i < menuItems.length; i++) { menuItems[i].className = menuItems[i].className.replace(" active-speed", ""); }
         element.className += " active-speed";
         optionsMenu.className = optionsMenu.className.replace(" active", "");
       }
@@ -532,24 +524,17 @@
           var curM = Math.floor(corePlayer.currentTime / 60), curS = Math.floor(corePlayer.currentTime % 60);
           var durM = Math.floor(corePlayer.duration / 60), durS = Math.floor(corePlayer.duration % 60);
           timeDisplay.innerText = curM + ":" + padZero(curS) + " / " + durM + ":" + padZero(durS);
-        } else { 
-          timeDisplay.innerText = "LIVE STREAM"; 
-        }
+        } else { timeDisplay.innerText = "LIVE STREAM"; }
       });
       
       function togglePlayPause() { 
           if (corePlayer.paused) { 
-              var playPromise = corePlayer.play(); 
-              if(playPromise !== undefined) { playPromise.catch(function(){}); }
-          } else { 
-              corePlayer.pause(); 
-          } 
+              var playPromise = corePlayer.play(); if(playPromise !== undefined) { playPromise.catch(function(){}); }
+          } else { corePlayer.pause(); } 
       }
 
       function triggerControlsOverlay() {
-        if (customControlsBar.className.indexOf("show") === -1) {
-            customControlsBar.className += " show";
-        }
+        if (customControlsBar.className.indexOf("show") === -1) { customControlsBar.className += " show"; }
         clearTimeout(controlTimer);
         controlTimer = setTimeout(function() {
           customControlsBar.className = customControlsBar.className.replace(" show", "");
@@ -569,20 +554,13 @@
 
       var syncFullscreenState = function() {
         if (document.fullscreenElement || document.webkitFullscreenElement) {
-          if (viewportSection.className.indexOf("maximized") === -1) {
-              viewportSection.className += " maximized";
-          }
+          if (viewportSection.className.indexOf("maximized") === -1) { viewportSection.className += " maximized"; }
           maximizeIcon.className = "fa-solid fa-compress";
-          
           if (activeChannel) {
             channelToast.innerText = activeChannel.name;
-            if (channelToast.className.indexOf("show") === -1) {
-                channelToast.className += " show";
-            }
+            if (channelToast.className.indexOf("show") === -1) { channelToast.className += " show"; }
             clearTimeout(toastTimer);
-            toastTimer = setTimeout(function() { 
-                channelToast.className = channelToast.className.replace(" show", ""); 
-            }, 2500);
+            toastTimer = setTimeout(function() { channelToast.className = channelToast.className.replace(" show", ""); }, 2500);
           }
         } else {
           viewportSection.className = viewportSection.className.replace(" maximized", "");
@@ -596,28 +574,18 @@
       document.addEventListener("webkitfullscreenchange", syncFullscreenState);
       viewportSection.addEventListener("mousemove", triggerControlsOverlay);
       viewportSection.addEventListener("click", function() { 
-          optionsMenu.className = optionsMenu.className.replace(" active", ""); 
-          triggerControlsOverlay(); 
+          optionsMenu.className = optionsMenu.className.replace(" active", ""); triggerControlsOverlay(); 
       });
 
       viewportSection.addEventListener("dblclick", function(e) { e.preventDefault(); e.stopPropagation(); toggleMaximizeMode(); });
       corePlayer.addEventListener("dblclick", function(e) { e.preventDefault(); e.stopPropagation(); toggleMaximizeMode(); });
-      
-      document.addEventListener("click", function() { 
-          optionsMenu.className = optionsMenu.className.replace(" active", ""); 
-      });
+      document.addEventListener("click", function() { optionsMenu.className = optionsMenu.className.replace(" active", ""); });
       
       /* Hardware Remote Key Control Interceptor Protocol */
       document.addEventListener("keydown", function(e) {
         triggerControlsOverlay();
-        if (e.keyCode === 427 || e.keyCode === 33 || e.key === 'ChannelUp' || e.keyCode === 38) { 
-          e.preventDefault(); 
-          changeChannel(1); 
-        } 
-        else if (e.keyCode === 428 || e.keyCode === 34 || e.key === 'ChannelDown' || e.keyCode === 40) { 
-          e.preventDefault(); 
-          changeChannel(-1); 
-        }
+        if (e.keyCode === 427 || e.keyCode === 33 || e.key === 'ChannelUp' || e.keyCode === 38) { e.preventDefault(); changeChannel(1); } 
+        else if (e.keyCode === 428 || e.keyCode === 34 || e.key === 'ChannelDown' || e.keyCode === 40) { e.preventDefault(); changeChannel(-1); }
       });
     </script>
   </body>
