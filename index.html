@@ -6,7 +6,7 @@
     
     <title>CoreAssets Premium TV Engine</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.10/dist/hls.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2=family=Poppins:wght@300;400;600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
     <style>
@@ -188,7 +188,6 @@
 
       var cacheBuster = new Date().getTime();
       var dataSourceUrl = "https://gist.githubusercontent.com/ayonpaulofficial-bit/0634edaf19b269aba5bf62523cc19e15/raw/sdyt.m3u?cb=" + cacheBuster;
-      
       var masterItems = [];
       var displayItems = [];
       var activeChannel = null; 
@@ -205,14 +204,15 @@
       var optionsMenu = document.getElementById("optionsMenu");
       var categoryContainer = document.getElementById("categoryContainer");
       var channelToast = document.getElementById("channelToast");
-      
       var hlsPlayer = null;
       var controlTimer = null;
       var toastTimer = null;
       var initialLoad = true;
       var previousVolume = 1;
 
-      /* Dynamic Category Hover Edge-Scrolling Protocol */
+      /* =========================================================
+         FIX 1: Perfect Category Edge Scrolling (Mouse Hover) 
+      ========================================================= */
       var catScrollInterval = null;
       categoryContainer.addEventListener("mousemove", function(e) {
         var rect = categoryContainer.getBoundingClientRect();
@@ -220,23 +220,31 @@
         var width = rect.width;
         
         clearInterval(catScrollInterval);
-        // Right Edge Hover Line Trigger (Within 80px from right)
-        if (x > width - 80) {
+        
+        if (x > width - 100) { // Mouse is near the right edge
           catScrollInterval = setInterval(function() {
             categoryContainer.scrollLeft += 6;
-          }, 10);
+          }, 15);
         } 
-        // Left Edge Hover Line Trigger (Within 80px from left)
-        else if (x < 80) {
+        else if (x < 100) { // Mouse is near the left edge
           catScrollInterval = setInterval(function() {
             categoryContainer.scrollLeft -= 6;
-          }, 10);
+          }, 15);
         }
       });
 
       categoryContainer.addEventListener("mouseleave", function() {
         clearInterval(catScrollInterval);
       });
+
+      // Enable focus for TV remotes on categories
+      var catBtns = document.querySelectorAll(".cat-btn");
+      for(var k = 0; k < catBtns.length; k++) {
+          catBtns[k].setAttribute("tabindex", "0");
+          catBtns[k].addEventListener("focus", function() {
+              this.scrollIntoView({behavior: "smooth", inline: "center", block: "nearest"});
+          });
+      }
 
       function updatePremiumClock() {
         var canvas = document.getElementById("analogClockCanvas");
@@ -245,7 +253,6 @@
         var width = canvas.width;
         var height = canvas.height;
         var radius = width / 2;
-        
         ctx.clearRect(0, 0, width, height);
         ctx.save();
         ctx.translate(radius, radius);
@@ -258,7 +265,6 @@
         ctx.strokeStyle = "#000000";
         ctx.lineWidth = r * 0.06;
         ctx.stroke();
-
         for (var i = 0; i < 60; i++) {
           var angle = i * Math.PI / 30;
           ctx.rotate(angle);
@@ -336,7 +342,6 @@
         ctx.lineWidth = r * 0.01;
         ctx.strokeStyle = "#000000";
         ctx.stroke();
-
         ctx.restore();
 
         var day = padZero(now.getDate());
@@ -347,7 +352,6 @@
         var dHrs = now.getHours() % 12;
         dHrs = dHrs ? dHrs : 12;
         var strTime = padZero(dHrs) + ':' + padZero(min) + ':' + padZero(sec) + ' ' + ampm;
-        
         var clockDisplay = document.getElementById("liveClock");
         if(clockDisplay) {
             clockDisplay.innerText = day + " " + month + " " + year + " | " + strTime;
@@ -361,7 +365,6 @@
         e.preventDefault();
         categoryContainer.scrollLeft += (e.deltaX || e.deltaY);
       });
-
       var xhr = new XMLHttpRequest();
       xhr.open("GET", dataSourceUrl, true);
       xhr.onreadystatechange = function () {
@@ -373,7 +376,8 @@
             if (line.indexOf("#EXTINF") === 0) {
               var name = "Unknown Channel", logo = "", group = "Others";
               var nameSplit = line.split(","); if (nameSplit.length > 1) name = nameSplit[1].replace(/^\s+|\s+$/g, '');
-              var logoMatch = line.match(/tvg-logo="(.*?)"/); if (logoMatch) logo = logoMatch[1];
+              var logoMatch = line.match(/tvg-logo="(.*?)"/);
+              if (logoMatch) logo = logoMatch[1];
               var groupMatch = line.match(/group-title="(.*?)"/); if (groupMatch) group = groupMatch[1];
               currentItem = { name: name, logo: logo, category: group };
             } else if (line && line.indexOf("#") !== 0 && currentItem) {
@@ -391,7 +395,8 @@
         for (var i = 0; i < buttons.length; i++) {
             buttons[i].className = buttons[i].className.replace(" active", "");
         }
-        if (element) { buttons.className += " active"; }
+        if (element) { buttons.className += " active";
+        }
         document.getElementById("searchInput").value = "";
         displayItems = [];
         for (var j = 0; j < masterItems.length; j++) {
@@ -407,8 +412,10 @@
         var cards = document.querySelectorAll(".item-card");
         for (var i = 0; i < displayItems.length; i++) {
           if (cards[i]) {
-            if (displayItems[i].name.toLowerCase().indexOf(query) !== -1) { cards[i].style.display = "flex"; } 
-            else { cards[i].style.display = "none"; }
+            if (displayItems[i].name.toLowerCase().indexOf(query) !== -1) { cards[i].style.display = "flex";
+            } 
+            else { cards[i].style.display = "none";
+            }
           }
         }
       }
@@ -422,39 +429,42 @@
           card.className = "item-card" + extraClass;
           
           var innerHTMLStr = "";
-          if(item.logo) { innerHTMLStr = '<img src="' + item.logo + '" onerror="this.style.display=\'none\'"><span>' + item.name + '</span>'; } 
-          else { innerHTMLStr = '<span>' + item.name + '</span>'; }
+          if(item.logo) { innerHTMLStr = '<img src="' + item.logo + '" onerror="this.style.display=\'none\'"><span>' + item.name + '</span>';
+          } 
+          else { innerHTMLStr = '<span>' + item.name + '</span>';
+          }
           card.innerHTML = innerHTMLStr;
-          
           (function(currentItem) { card.onclick = function() { streamSource(currentItem); }; })(item);
           assetGrid.appendChild(card);
         }
-        if (initialLoad && displayItems.length > 0) { initialLoad = false; streamSource(displayItems[0]); }
+        if (initialLoad && displayItems.length > 0) { initialLoad = false; streamSource(displayItems[0]);
+        }
       }
 
-      function scrollGrid(dir) { assetGrid.scrollTop += dir * 250; }
+      function scrollGrid(dir) { assetGrid.scrollTop += dir * 250;
+      }
 
       function streamSource(item) {
         if (!item) return;
         activeChannel = item;
         if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
 
-        /* Secure Link Mixed Content Dynamic Bypass Engine */
+        /* =========================================================
+           FIX 2: Reverted TargetURL to exact source to prevent breaking HTTP links.
+           No more forced HTTPS conversion. Plays exactly what is in M3U.
+        ========================================================= */
         var targetUrl = item.url;
-        if (window.location.protocol === 'https:' && targetUrl.indexOf('http://') === 0) {
-          targetUrl = targetUrl.replace('http://', 'https://');
-        }
 
         var startPlayback = function() {
             var playPromise = corePlayer.play();
             if (playPromise !== undefined) { playPromise.catch(function(error) {}); }
         };
-
+        
         if (typeof Hls !== 'undefined' && Hls.isSupported()) {
           hlsPlayer = new Hls({ 
             lowLatencyMode: true, 
-            maxBufferLength: 1, 
-            maxMaxBufferLength: 2,
+            maxBufferLength: 2, 
+            maxMaxBufferLength: 4,
             liveSyncDurationCount: 1,
             enableWorker: true 
           });
@@ -472,7 +482,8 @@
         var cards = document.querySelectorAll(".item-card");
         for (var j = 0; j < cards.length; j++) {
           cards[j].className = cards[j].className.replace(" active-item", "");
-          if (displayItems[j] && displayItems[j].url === item.url) { cards[j].className += " active-item"; }
+          if (displayItems[j] && displayItems[j].url === item.url) { cards[j].className += " active-item";
+          }
         }
       }
 
@@ -482,7 +493,8 @@
         
         var currentIdx = -1;
         for(var i = 0; i < displayItems.length; i++) {
-            if(displayItems[i].url === activeChannel.url) { currentIdx = i; break; }
+            if(displayItems[i].url === activeChannel.url) { currentIdx = i;
+            break; }
         }
         if (currentIdx !== -1) {
           var targetIdx = (currentIdx + step + displayItems.length) % displayItems.length;
@@ -493,26 +505,33 @@
       function setVolume(val) {
         corePlayer.volume = val;
         volumeSlider.value = val;
-        if(val == 0) { volumeIcon.className = "fa-solid fa-volume-xmark"; }
-        else if (val < 0.5) { volumeIcon.className = "fa-solid fa-volume-low"; }
-        else { volumeIcon.className = "fa-solid fa-volume-high"; }
+        if(val == 0) { volumeIcon.className = "fa-solid fa-volume-xmark";
+        }
+        else if (val < 0.5) { volumeIcon.className = "fa-solid fa-volume-low";
+        }
+        else { volumeIcon.className = "fa-solid fa-volume-high";
+        }
       }
 
       function toggleMute() {
-        if (corePlayer.volume > 0) { previousVolume = corePlayer.volume; setVolume(0); } 
-        else { setVolume(previousVolume > 0 ? previousVolume : 1); }
+        if (corePlayer.volume > 0) { previousVolume = corePlayer.volume;
+        setVolume(0); } 
+        else { setVolume(previousVolume > 0 ? previousVolume : 1);
+        }
       }
 
       function toggleOptionsMenu(event) {
         event.stopPropagation();
         if(optionsMenu.className.indexOf("active") !== -1) { optionsMenu.className = optionsMenu.className.replace(" active", ""); } 
-        else { optionsMenu.className += " active"; }
+        else { optionsMenu.className += " active";
+        }
       }
 
       function setSpeed(speedVal, element) {
         corePlayer.playbackRate = speedVal;
         var menuItems = document.querySelectorAll(".menu-item");
-        for(var i = 0; i < menuItems.length; i++) { menuItems[i].className = menuItems[i].className.replace(" active-speed", ""); }
+        for(var i = 0; i < menuItems.length; i++) { menuItems[i].className = menuItems[i].className.replace(" active-speed", "");
+        }
         element.className += " active-speed";
         optionsMenu.className = optionsMenu.className.replace(" active", "");
       }
@@ -524,17 +543,20 @@
           var curM = Math.floor(corePlayer.currentTime / 60), curS = Math.floor(corePlayer.currentTime % 60);
           var durM = Math.floor(corePlayer.duration / 60), durS = Math.floor(corePlayer.duration % 60);
           timeDisplay.innerText = curM + ":" + padZero(curS) + " / " + durM + ":" + padZero(durS);
-        } else { timeDisplay.innerText = "LIVE STREAM"; }
+        } else { 
+          timeDisplay.innerText = "LIVE STREAM"; }
       });
-      
       function togglePlayPause() { 
           if (corePlayer.paused) { 
-              var playPromise = corePlayer.play(); if(playPromise !== undefined) { playPromise.catch(function(){}); }
-          } else { corePlayer.pause(); } 
+              var playPromise = corePlayer.play();
+              if(playPromise !== undefined) { playPromise.catch(function(){}); }
+          } else { corePlayer.pause();
+          } 
       }
 
       function triggerControlsOverlay() {
-        if (customControlsBar.className.indexOf("show") === -1) { customControlsBar.className += " show"; }
+        if (customControlsBar.className.indexOf("show") === -1) { customControlsBar.className += " show";
+        }
         clearTimeout(controlTimer);
         controlTimer = setTimeout(function() {
           customControlsBar.className = customControlsBar.className.replace(" show", "");
@@ -544,17 +566,22 @@
 
       function toggleMaximizeMode() {
         if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-          if (viewportSection.requestFullscreen) { viewportSection.requestFullscreen(); } 
-          else if (viewportSection.webkitRequestFullscreen) { viewportSection.webkitRequestFullscreen(); }
+          if (viewportSection.requestFullscreen) { viewportSection.requestFullscreen();
+          } 
+          else if (viewportSection.webkitRequestFullscreen) { viewportSection.webkitRequestFullscreen();
+          }
         } else {
-          if (document.exitFullscreen) { document.exitFullscreen(); } 
-          else if (document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
+          if (document.exitFullscreen) { document.exitFullscreen();
+          } 
+          else if (document.webkitExitFullscreen) { document.webkitExitFullscreen();
+          }
         }
       }
 
       var syncFullscreenState = function() {
         if (document.fullscreenElement || document.webkitFullscreenElement) {
-          if (viewportSection.className.indexOf("maximized") === -1) { viewportSection.className += " maximized"; }
+          if (viewportSection.className.indexOf("maximized") === -1) { viewportSection.className += " maximized";
+          }
           maximizeIcon.className = "fa-solid fa-compress";
           if (activeChannel) {
             channelToast.innerText = activeChannel.name;
@@ -569,14 +596,12 @@
         }
         triggerControlsOverlay();
       };
-      
       document.addEventListener("fullscreenchange", syncFullscreenState);
       document.addEventListener("webkitfullscreenchange", syncFullscreenState);
       viewportSection.addEventListener("mousemove", triggerControlsOverlay);
       viewportSection.addEventListener("click", function() { 
           optionsMenu.className = optionsMenu.className.replace(" active", ""); triggerControlsOverlay(); 
       });
-
       viewportSection.addEventListener("dblclick", function(e) { e.preventDefault(); e.stopPropagation(); toggleMaximizeMode(); });
       corePlayer.addEventListener("dblclick", function(e) { e.preventDefault(); e.stopPropagation(); toggleMaximizeMode(); });
       document.addEventListener("click", function() { optionsMenu.className = optionsMenu.className.replace(" active", ""); });
