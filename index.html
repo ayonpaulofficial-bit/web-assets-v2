@@ -3,13 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
     <title>CoreAssets Premium TV Engine</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.10/dist/hls.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Poppins", sans-serif; }
+      * { margin: 0; padding: 0; box-sizing: border-box; font-family: \"Poppins\", sans-serif; }
       body { background-color: #000000; color: #ffffff; height: 100vh; display: flex; flex-direction: column; overflow: hidden; -webkit-user-select: none; user-select: none; }
       
       /* --- HEADER --- */
@@ -96,14 +97,12 @@
         .main-container { flex-direction: column; height: auto; overflow: visible; display: block; }
         .viewport-section { width: 100% !important; height: 35vh; min-height: 250px; position: sticky; top: 0; z-index: 999; }
         
-        /* Fixed mobile sidebar right-side gap */
         .sidebar { width: 100% !important; height: auto; border-left: none; padding-right: 0 !important; overflow: visible; }
         
         .scroll-controls-side { display: none; } 
         
         .category-container { padding: 10px 15px; }
         
-        /* Adjusted grid to perfectly fit screen horizontally */
         .asset-grid { padding: 0 15px 30px 15px !important; overflow-y: visible; height: auto; gap: 10px; justify-content: flex-start; }
         .item-card { width: calc(50% - 5px) !important; height: 110px; margin: 0; } 
         
@@ -442,19 +441,24 @@
             var playPromise = corePlayer.play();
             if (playPromise !== undefined) {
                 playPromise.catch(function(error) {
-                    console.log("Autoplay caught on mobile, requires user interaction", error);
+                    console.log("Autoplay context interception handled safely.", error);
                 });
             }
         };
 
-        // Added Native Support Check (Fixes mobile playback issue)
+        /* Ultra-Fast Instant Load Latency Tweak */
         if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-          hlsPlayer = new Hls({ lowLatencyMode: true, maxBufferLength: 3, enableWorker: true });
+          hlsPlayer = new Hls({ 
+            lowLatencyMode: true, 
+            maxBufferLength: 1, 
+            maxMaxBufferLength: 2,
+            liveSyncDurationCount: 1,
+            enableWorker: true 
+          });
           hlsPlayer.loadSource(item.url);
           hlsPlayer.attachMedia(corePlayer);
           hlsPlayer.on(Hls.Events.MANIFEST_PARSED, startPlayback);
         } else if (corePlayer.canPlayType('application/vnd.apple.mpegurl')) {
-          // Native mobile playback fallback (Safari, iOS, Android WebViews)
           corePlayer.src = item.url;
           corePlayer.addEventListener('loadedmetadata', startPlayback);
         } else {
@@ -603,6 +607,7 @@
           optionsMenu.className = optionsMenu.className.replace(" active", ""); 
       });
       
+      /* Hardware Remote Key Control Interceptor Protocol */
       document.addEventListener("keydown", function(e) {
         triggerControlsOverlay();
         if (e.keyCode === 427 || e.keyCode === 33 || e.key === 'ChannelUp' || e.keyCode === 38) { 
