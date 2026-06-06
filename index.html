@@ -67,8 +67,11 @@
       .scroll-btn { background: #141414; color: #aaa; border: 1px solid #252525; width: 48px; height: 48px; border-radius: 50%; cursor: pointer; font-size: 18px; display: flex; justify-content: center; align-items: center; transition: all 0.2s; outline: none; box-shadow: 0 4px 10px rgba(0,0,0,0.6); }
       .scroll-btn:hover, .scroll-btn:focus { background: #252525; color: #fff; border-color: #555; transform: scale(1.08); }
 
-      .category-container { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 12px; padding: 5px 20px 20px 20px; background: #0a0a0a; flex-shrink: 0; -webkit-overflow-scrolling: touch; scroll-behavior: smooth; position: relative; }
+      .category-container { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 12px; padding: 5px 20px 15px 20px; background: #0a0a0a; flex-shrink: 0; -webkit-overflow-scrolling: touch; scroll-behavior: smooth; position: relative; }
       .category-container::-webkit-scrollbar { display: none; }
+      .cat-nav-row { display: flex; align-items: center; gap: 12px; padding: 0 20px 14px 20px; background: #0a0a0a; flex-shrink: 0; }
+      .cat-arrow-btn { background: #141414; border: 1px solid #333; color: #aaa; width: 58px; height: 58px; border-radius: 50%; flex-shrink: 0; cursor: pointer; font-size: 22px; display: flex; justify-content: center; align-items: center; outline: none; transition: all 0.2s; }
+      .cat-arrow-btn:hover, .cat-arrow-btn:focus { background: #252525; color: #fff; border-color: #555; transform: scale(1.08); }
       .cat-btn { background: #141414; border: 1px solid #222; color: #888; padding: 12px 22px; border-radius: 25px; font-size: 15px; cursor: pointer; white-space: nowrap; outline: none; transition: all 0.15s; }
       .cat-btn:hover, .cat-btn:focus { background: #333; color: #fff; border-color: #555; }
       .cat-btn.active { background: #ffffff; color: #000000; border-color: #ffffff; font-weight: 600; }
@@ -169,17 +172,22 @@
         </div>
 
         <div class="category-container" id="categoryContainer">
-          <button class="cat-btn active" onclick="switchCategory('All', this)">All</button>
-          <button class="cat-btn" onclick="switchCategory('Bangla', this)">Bangla</button>
-          <button class="cat-btn" onclick="switchCategory('Sports', this)">Sports</button>
-          <button class="cat-btn" onclick="switchCategory('Spiritual', this)">Spiritual</button>
-          <button class="cat-btn" onclick="switchCategory('Cartoon', this)">Cartoon</button>
-          <button class="cat-btn" onclick="switchCategory('Geography', this)">Geography</button>
-          <button class="cat-btn" onclick="switchCategory('Bangla News', this)">Bangla News</button>
-          <button class="cat-btn" onclick="switchCategory('International News', this)">International News</button>
-          <button class="cat-btn" onclick="switchCategory('Movies', this)">Movies</button>
-          <button class="cat-btn" onclick="switchCategory('Indian', this)">Indian</button>
-          <button class="cat-btn" onclick="switchCategory('Others', this)">Others</button>
+            <button class="cat-btn active" onclick="switchCategory('All', this)">All</button>
+            <button class="cat-btn" onclick="switchCategory('Bangla', this)">Bangla</button>
+            <button class="cat-btn" onclick="switchCategory('Sports', this)">Sports</button>
+            <button class="cat-btn" onclick="switchCategory('Spiritual', this)">Spiritual</button>
+            <button class="cat-btn" onclick="switchCategory('Cartoon', this)">Cartoon</button>
+            <button class="cat-btn" onclick="switchCategory('Geography', this)">Geography</button>
+            <button class="cat-btn" onclick="switchCategory('Bangla News', this)">Bangla News</button>
+            <button class="cat-btn" onclick="switchCategory('International News', this)">International News</button>
+            <button class="cat-btn" onclick="switchCategory('Movies', this)">Movies</button>
+            <button class="cat-btn" onclick="switchCategory('Indian', this)">Indian</button>
+            <button class="cat-btn" onclick="switchCategory('Others', this)">Others</button>
+        </div>
+
+        <div class="cat-nav-row">
+          <button class="cat-arrow-btn" onclick="shiftCategory(-1)"><i class="fa-solid fa-chevron-left"></i></button>
+          <button class="cat-arrow-btn" onclick="shiftCategory(1)"><i class="fa-solid fa-chevron-right"></i></button>
         </div>
 
         <div class="asset-grid" id="assetGrid"></div>
@@ -391,6 +399,17 @@
         // Fix 3: Always reset grid scroll to top on category switch
         assetGrid.scrollTop = 0;
         setTimeout(updateFocusUI, 50);
+      }
+
+      function shiftCategory(dir) {
+        var buttons = document.querySelectorAll(".cat-btn");
+        var newIndex = currentCatIndex + dir;
+        if (newIndex < 0) newIndex = 0;
+        if (newIndex >= buttons.length) newIndex = buttons.length - 1;
+        if (newIndex === currentCatIndex) return;
+        currentCatIndex = newIndex;
+        buttons[currentCatIndex].click();
+        buttons[currentCatIndex].scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
       }
 
       function filterItems() {
