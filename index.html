@@ -373,8 +373,10 @@
         var buttons = document.querySelectorAll(".cat-btn");
         for (var i = 0; i < buttons.length; i++) {
             buttons[i].className = buttons[i].className.replace(" active", "");
+            // Sync currentCatIndex when called programmatically
+            if (buttons[i] === element) { currentCatIndex = i; }
         }
-        if (element) { buttons.className += " active"; }
+        if (element) { element.className += " active"; }
         
         document.getElementById("searchInput").value = "";
         displayItems = [];
@@ -384,9 +386,11 @@
           }
         }
         
-        currentGridIndex = 0; // Reset D-Pad grid position on cat switch
+        currentGridIndex = 0;
         buildGrid();
-        setTimeout(updateFocusUI, 50); // Refresh D-Pad focus visuals
+        // Fix 3: Always reset grid scroll to top on category switch
+        assetGrid.scrollTop = 0;
+        setTimeout(updateFocusUI, 50);
       }
 
       function filterItems() {
@@ -424,48 +428,71 @@
 
       function scrollGrid(dir) { assetGrid.scrollTop += dir * 250; }
 
-      // --- SUPER FAST PLAYBACK LOGIC (From Code 2) ---
+      // --- SUPER FAST PLAYBACK LOGIC (Vewd/HbbTV Optimized) ---
+      var pendingUrl = null;
+
       function streamSource(item) {
         if (!item) return;
         activeChannel = item;
-        
-        if (hlsPlayer) { 
-          hlsPlayer.destroy(); 
-          hlsPlayer = null; 
-        }
+        pendingUrl = item.url;
 
-        var targetUrl = item.url;
-        
-        if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-          hlsPlayer = new Hls(); 
-          hlsPlayer.loadSource(targetUrl);
-          hlsPlayer.attachMedia(corePlayer);
-          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, function () {
-            var playPromise = corePlayer.play();
-            if (playPromise !== undefined) {
-              playPromise.catch(function(error) {});
-            }
-          });
-        } else if (corePlayer.canPlayType("application/vnd.apple.mpegurl")) {
-          corePlayer.src = targetUrl;
-          corePlayer.addEventListener("loadedmetadata", function () {
-            var playPromise = corePlayer.play();
-            if (playPromise !== undefined) {
-              playPromise.catch(function(error) {});
-            }
-          });
-        } else {
-          corePlayer.src = targetUrl;
-          corePlayer.play().catch(function(e){});
-        }
-
+        // Update active card UI immediately - don't wait for stream
         var cards = document.querySelectorAll(".item-card");
         for (var j = 0; j < cards.length; j++) {
           cards[j].className = cards[j].className.replace(" active-item", "");
-          if (displayItems[j] && displayItems[j].url === item.url) { 
-              cards[j].className += " active-item";
-              cards[j].scrollIntoView({behavior: "smooth", block: "nearest"});
+          if (displayItems[j] && displayItems[j].url === item.url) {
+            cards[j].className += " active-item";
+            cards[j].scrollIntoView({ behavior: "smooth", block: "nearest" });
           }
+        }
+
+        var targetUrl = item.url;
+
+        // Fast destroy and reload
+        if (hlsPlayer) {
+          hlsPlayer.destroy();
+          hlsPlayer = null;
+        }
+        corePlayer.pause();
+        corePlayer.removeAttribute("src");
+        // Force immediate resource release
+        try { corePlayer.load(); } catch(e) {}
+
+        // Vewd/HbbTV: native HLS support — use direct src for fastest startup
+        if (corePlayer.canPlayType("application/vnd.apple.mpegurl") || corePlayer.canPlayType("application/x-mpegURL")) {
+          corePlayer.src = targetUrl;
+          corePlayer.load();
+          var playPromise = corePlayer.play();
+          if (playPromise !== undefined) { playPromise.catch(function() {}); }
+
+        } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+          // Desktop/Chrome fallback with low-latency config
+          hlsPlayer = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 0,
+            maxBufferLength: 10,
+            maxMaxBufferLength: 20,
+            maxBufferSize: 20 * 1000 * 1000,
+            startPosition: -1,
+            liveSyncDurationCount: 1,
+            liveMaxLatencyDurationCount: 3
+          });
+          hlsPlayer.loadSource(targetUrl);
+          hlsPlayer.attachMedia(corePlayer);
+          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, function() {
+            // Only play if this is still the pending channel
+            if (pendingUrl === targetUrl) {
+              var playPromise = corePlayer.play();
+              if (playPromise !== undefined) { playPromise.catch(function() {}); }
+            }
+          });
+
+        } else {
+          corePlayer.src = targetUrl;
+          corePlayer.load();
+          var p = corePlayer.play();
+          if (p !== undefined) { p.catch(function() {}); }
         }
       }
 
@@ -608,19 +635,19 @@
         if (e.keyCode === 427 || e.keyCode === 33 || e.key === 'ChannelUp') { e.preventDefault(); changeChannel(1); return; } 
         else if (e.keyCode === 428 || e.keyCode === 34 || e.key === 'ChannelDown') { e.preventDefault(); changeChannel(-1); return; }
 
-        var gridItems = document.querySelectorAll(".item-card");
-        var catBtns = document.querySelectorAll(".cat-btn");
-
         // RIGHT ARROW
         if (e.keyCode === 39) { 
             e.preventDefault();
             if (currentNavState === 'category') {
-                if (currentCatIndex < catBtns.length - 1) {
+                var catBtnsNow = document.querySelectorAll(".cat-btn");
+                if (currentCatIndex < catBtnsNow.length - 1) {
                     currentCatIndex++;
-                    catBtns[currentCatIndex].click(); // Switches section automatically
+                    catBtnsNow[currentCatIndex].click();
+                    currentNavState = 'category';
                 }
             } else if (currentNavState === 'grid') {
-                if (currentGridIndex < gridItems.length - 1) {
+                var gridItemsNow = document.querySelectorAll(".item-card");
+                if (currentGridIndex < gridItemsNow.length - 1) {
                     currentGridIndex++;
                     updateFocusUI();
                 }
@@ -630,9 +657,11 @@
         else if (e.keyCode === 37) { 
              e.preventDefault();
              if (currentNavState === 'category') {
+                var catBtnsLeft = document.querySelectorAll(".cat-btn");
                 if (currentCatIndex > 0) {
                     currentCatIndex--;
-                    catBtns[currentCatIndex].click(); // Switches to previous section
+                    catBtnsLeft[currentCatIndex].click();
+                    currentNavState = 'category';
                 }
             } else if (currentNavState === 'grid') {
                 if (currentGridIndex > 0) {
@@ -648,17 +677,19 @@
                 currentNavState = 'category';
                 updateFocusUI();
             } else if (currentNavState === 'category') {
-                if (gridItems.length > 0) {
+                var gridItemsDown = document.querySelectorAll(".item-card");
+                if (gridItemsDown.length > 0) {
                     currentNavState = 'grid';
-                    currentGridIndex = 0; // Focus on first channel
+                    currentGridIndex = 0;
                     updateFocusUI();
                 }
             } else if (currentNavState === 'grid') {
-                if (currentGridIndex + 3 < gridItems.length) { 
+                var gridItemsDn = document.querySelectorAll(".item-card");
+                if (currentGridIndex + 3 < gridItemsDn.length) { 
                     currentGridIndex += 3;
                     updateFocusUI();
-                } else if (currentGridIndex < gridItems.length - 1) {
-                    currentGridIndex = gridItems.length - 1;
+                } else if (currentGridIndex < gridItemsDn.length - 1) {
+                    currentGridIndex = gridItemsDn.length - 1;
                     updateFocusUI();
                 }
             }
@@ -681,12 +712,16 @@
         }
         // ENTER / OK / CENTER BUTTON
         else if (e.keyCode === 13) { 
-            if (currentNavState === 'grid' && gridItems[currentGridIndex]) {
+            var gridItemsEnter = document.querySelectorAll(".item-card");
+            var catBtnsEnter = document.querySelectorAll(".cat-btn");
+            if (currentNavState === 'grid' && gridItemsEnter[currentGridIndex]) {
                 e.preventDefault();
-                gridItems[currentGridIndex].click(); // Play the hovered channel
-            } else if (currentNavState === 'category' && catBtns[currentCatIndex]) {
+                // Play on Enter/OK only, not on hover/focus
+                gridItemsEnter[currentGridIndex].click();
+            } else if (currentNavState === 'category' && catBtnsEnter[currentCatIndex]) {
                  e.preventDefault();
-                 catBtns[currentCatIndex].click();
+                 catBtnsEnter[currentCatIndex].click();
+                 currentNavState = 'category';
             }
         }
       });
