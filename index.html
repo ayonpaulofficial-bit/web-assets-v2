@@ -8,7 +8,7 @@
     />
 
     <title>CoreAssets Premium TV Engine</title>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@0.14.17/dist/hls.min.js"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap"
       rel="stylesheet"
@@ -68,7 +68,6 @@
         font-weight: 600;
         font-family: monospace;
       }
-      /* PM Drop completely fixed with larger min-width */
       #liveClock {
         display: inline-block;
         min-width: 380px; 
@@ -211,9 +210,7 @@
         border-radius: 3px;
         outline: none;
         opacity: 0;
-        transition:
-          width 0.2s ease,
-          opacity 0.2s ease;
+        transition: width 0.2s ease, opacity 0.2s ease;
         cursor: pointer;
       }
       .volume-slider::-webkit-slider-thumb {
@@ -407,10 +404,7 @@
         justify-content: center;
         align-items: center;
         cursor: pointer;
-        transition:
-          background 0.2s ease,
-          border-color 0.2s ease,
-          transform 0.2s ease;
+        transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
         outline: none;
       }
       .item-card:hover,
@@ -603,9 +597,33 @@
     </div>
 
     <script>
+      // FIX 2: Prevent unhandled console crashes in extremely old engines
+      if (typeof window.console === "undefined") {
+        window.console = {
+          log: function () {},
+          error: function () {},
+          warn: function () {},
+          info: function () {}
+        };
+      }
+
       document.addEventListener("contextmenu", function (e) {
-        e.preventDefault();
+        if(e && e.preventDefault) e.preventDefault();
       });
+
+      // FIX 3: Safe Class Toggling replacements for the buggy TV classList API
+      function aClass(el, cls) {
+        if (!el) return;
+        if (el.className.indexOf(cls) === -1) {
+          el.className = el.className === "" ? cls : el.className + " " + cls;
+        }
+      }
+
+      function rClass(el, cls) {
+        if (!el) return;
+        var reg = new RegExp("(?:^|\\s)" + cls + "(?!\\S)", "g");
+        el.className = el.className.replace(reg, "").replace(/^\s+|\s+$/g, "");
+      }
 
       function padZero(num) {
         return num < 10 ? "0" + num : num;
@@ -615,6 +633,7 @@
       var dataSourceUrl =
         "https://gist.githubusercontent.com/ayonpaulofficial-bit/0634edaf19b269aba5bf62523cc19e15/raw/sdyt.m3u?cb=" +
         cacheBuster;
+
       var masterItems = [];
       var displayItems = [];
       var activeChannel = null;
@@ -631,6 +650,7 @@
       var optionsMenu = document.getElementById("optionsMenu");
       var categoryContainer = document.getElementById("categoryContainer");
       var channelToast = document.getElementById("channelToast");
+
       var hlsPlayer = null;
       var controlTimer = null;
       var toastTimer = null;
@@ -641,125 +661,127 @@
       var currentCategoryIndex = 0;
       var currentGridIndex = 0;
 
+      // FIX 4: Canvas Crash Protection. Ensure digital clock updates first.
       function updatePremiumClock() {
-        var canvas = document.getElementById("analogClockCanvas");
-        if (!canvas) return;
-        var ctx = canvas.getContext("2d");
-        var width = canvas.width;
-        var height = canvas.height;
-        var radius = width / 2;
-        ctx.clearRect(0, 0, width, height);
-        ctx.save();
-        ctx.translate(radius, radius);
-        var r = radius * 0.92;
-
-        ctx.beginPath();
-        ctx.arc(0, 0, r, 0, 2 * Math.PI);
-        ctx.fillStyle = "#ffffff";
-        ctx.fill();
-        ctx.strokeStyle = "#000000";
-        ctx.lineWidth = r * 0.06;
-        ctx.stroke();
-        for (var i = 0; i < 60; i++) {
-          var angle = (i * Math.PI) / 30;
-          ctx.rotate(angle);
-          ctx.beginPath();
-          if (i % 5 === 0) {
-            ctx.lineWidth = r * 0.04;
-            ctx.moveTo(0, -r * 0.98);
-            ctx.lineTo(0, -r * 0.86);
-          } else {
-            ctx.lineWidth = r * 0.015;
-            ctx.moveTo(0, -r * 0.98);
-            ctx.lineTo(0, -r * 0.92);
-          }
-          ctx.strokeStyle = "#000000";
-          ctx.stroke();
-          ctx.rotate(-angle);
-        }
-
-        ctx.fillStyle = "#000000";
-        ctx.font = "bold " + Math.round(r * 0.19) + "px Arial, sans-serif";
-        ctx.textBaseline = "middle";
-        ctx.textAlign = "center";
-        for (var num = 1; num <= 12; num++) {
-          var numAngle = (num * Math.PI) / 6;
-          var nx = Math.sin(numAngle) * (r * 0.72);
-          var ny = -Math.cos(numAngle) * (r * 0.72);
-          ctx.fillText(num.toString(), nx, ny);
-        }
-
-        // TV Time 30 mins Off Fix -> Force BD Time (+6) exactly
         var localNow = new Date();
         var utcTime = localNow.getTime() + (localNow.getTimezoneOffset() * 60000);
         var now = new Date(utcTime + (3600000 * 6));
 
-        var hr = now.getHours() % 12;
-        var min = now.getMinutes();
-        var sec = now.getSeconds();
-
-        var hrAngle =
-          (hr * Math.PI) / 6 + (min * Math.PI) / 360 + (sec * Math.PI) / 21600;
-        ctx.save();
-        ctx.rotate(hrAngle);
-        ctx.lineWidth = r * 0.065;
-        ctx.lineCap = "round";
-        ctx.strokeStyle = "#000000";
-        ctx.beginPath();
-        ctx.moveTo(0, r * 0.12);
-        ctx.lineTo(0, -r * 0.52);
-        ctx.stroke();
-        ctx.restore();
-
-        var minAngle = (min * Math.PI) / 30 + (sec * Math.PI) / 1800;
-        ctx.save();
-        ctx.rotate(minAngle);
-        ctx.lineWidth = r * 0.045;
-        ctx.lineCap = "round";
-        ctx.strokeStyle = "#000000";
-        ctx.beginPath();
-        ctx.moveTo(0, r * 0.12);
-        ctx.lineTo(0, -r * 0.76);
-        ctx.stroke();
-        ctx.restore();
-
-        var secAngle = (sec * Math.PI) / 30;
-        ctx.save();
-        ctx.rotate(secAngle);
-        ctx.lineWidth = r * 0.018;
-        ctx.lineCap = "round";
-        ctx.strokeStyle = "#ff3333";
-        ctx.beginPath();
-        ctx.moveTo(0, r * 0.22);
-        ctx.lineTo(0, -r * 0.84);
-        ctx.stroke();
-        ctx.restore();
-
-        ctx.beginPath();
-        ctx.arc(0, 0, r * 0.045, 0, 2 * Math.PI);
-        ctx.fillStyle = "#ff3333";
-        ctx.fill();
-        ctx.lineWidth = r * 0.01;
-        ctx.strokeStyle = "#000000";
-        ctx.stroke();
-        ctx.restore();
-
         var day = padZero(now.getDate());
-        var months = [
-          "Jan", "Feb", "Mar", "Apr", "May", "Jun", 
-          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-        ];
+        var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         var month = months[now.getMonth()];
         var year = now.getFullYear();
         var ampm = now.getHours() >= 12 ? "PM" : "AM";
         var dHrs = now.getHours() % 12;
         dHrs = dHrs ? dHrs : 12;
-        var strTime =
-          padZero(dHrs) + ":" + padZero(min) + ":" + padZero(sec) + " " + ampm;
+
+        var hr = now.getHours() % 12;
+        var min = now.getMinutes();
+        var sec = now.getSeconds();
+
+        var strTime = padZero(dHrs) + ":" + padZero(min) + ":" + padZero(sec) + " " + ampm;
         var clockDisplay = document.getElementById("liveClock");
         if (clockDisplay) {
-          clockDisplay.innerText =
-            day + " " + month + " " + year + " | " + strTime;
+          clockDisplay.innerHTML = day + " " + month + " " + year + " | " + strTime;
+        }
+
+        try {
+            var canvas = document.getElementById("analogClockCanvas");
+            if (canvas && canvas.getContext) {
+                var ctx = canvas.getContext("2d");
+                var width = canvas.width;
+                var height = canvas.height;
+                var radius = width / 2;
+                ctx.clearRect(0, 0, width, height);
+                ctx.save();
+                ctx.translate(radius, radius);
+                var r = radius * 0.92;
+
+                ctx.beginPath();
+                ctx.arc(0, 0, r, 0, 2 * Math.PI);
+                ctx.fillStyle = "#ffffff";
+                ctx.fill();
+                ctx.strokeStyle = "#000000";
+                ctx.lineWidth = r * 0.06;
+                ctx.stroke();
+
+                for (var i = 0; i < 60; i++) {
+                  var angle = (i * Math.PI) / 30;
+                  ctx.rotate(angle);
+                  ctx.beginPath();
+                  if (i % 5 === 0) {
+                    ctx.lineWidth = r * 0.04;
+                    ctx.moveTo(0, -r * 0.98);
+                    ctx.lineTo(0, -r * 0.86);
+                  } else {
+                    ctx.lineWidth = r * 0.015;
+                    ctx.moveTo(0, -r * 0.98);
+                    ctx.lineTo(0, -r * 0.92);
+                  }
+                  ctx.strokeStyle = "#000000";
+                  ctx.stroke();
+                  ctx.rotate(-angle);
+                }
+
+                ctx.fillStyle = "#000000";
+                ctx.font = "bold " + Math.round(r * 0.19) + "px Arial, sans-serif";
+                ctx.textBaseline = "middle";
+                ctx.textAlign = "center";
+
+                for (var num = 1; num <= 12; num++) {
+                  var numAngle = (num * Math.PI) / 6;
+                  var nx = Math.sin(numAngle) * (r * 0.72);
+                  var ny = -Math.cos(numAngle) * (r * 0.72);
+                  ctx.fillText(num.toString(), nx, ny);
+                }
+
+                var hrAngle = (hr * Math.PI) / 6 + (min * Math.PI) / 360 + (sec * Math.PI) / 21600;
+                ctx.save();
+                ctx.rotate(hrAngle);
+                ctx.lineWidth = r * 0.065;
+                ctx.lineCap = "round";
+                ctx.strokeStyle = "#000000";
+                ctx.beginPath();
+                ctx.moveTo(0, r * 0.12);
+                ctx.lineTo(0, -r * 0.52);
+                ctx.stroke();
+                ctx.restore();
+
+                var minAngle = (min * Math.PI) / 30 + (sec * Math.PI) / 1800;
+                ctx.save();
+                ctx.rotate(minAngle);
+                ctx.lineWidth = r * 0.045;
+                ctx.lineCap = "round";
+                ctx.strokeStyle = "#000000";
+                ctx.beginPath();
+                ctx.moveTo(0, r * 0.12);
+                ctx.lineTo(0, -r * 0.76);
+                ctx.stroke();
+                ctx.restore();
+
+                var secAngle = (sec * Math.PI) / 30;
+                ctx.save();
+                ctx.rotate(secAngle);
+                ctx.lineWidth = r * 0.018;
+                ctx.lineCap = "round";
+                ctx.strokeStyle = "#ff3333";
+                ctx.beginPath();
+                ctx.moveTo(0, r * 0.22);
+                ctx.lineTo(0, -r * 0.84);
+                ctx.stroke();
+                ctx.restore();
+
+                ctx.beginPath();
+                ctx.arc(0, 0, r * 0.045, 0, 2 * Math.PI);
+                ctx.fillStyle = "#ff3333";
+                ctx.fill();
+                ctx.lineWidth = r * 0.01;
+                ctx.strokeStyle = "#000000";
+                ctx.stroke();
+                ctx.restore();
+            }
+        } catch(err) {
+            // Silently ignore canvas errors so the app keeps running
         }
       }
 
@@ -767,41 +789,55 @@
       updatePremiumClock();
 
       categoryContainer.addEventListener("wheel", function (e) {
-        e.preventDefault();
+        if(e && e.preventDefault) e.preventDefault();
         categoryContainer.scrollLeft += e.deltaX || e.deltaY;
       });
 
+      // FIX 5: UI Error reporting for blocked TV connections
       var xhr = new XMLHttpRequest();
-      xhr.open("GET", dataSourceUrl, true);
-      xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-          var lines = xhr.responseText.split("\n");
-          var currentItem = null;
-          for (var i = 0; i < lines.length; i++) {
-            var line = lines[i].replace(/^\s+|\s+$/g, "");
-            if (line.indexOf("#EXTINF") === 0) {
-              var name = "Unknown Channel",
-                logo = "",
-                group = "Others";
-              var nameSplit = line.split(",");
-              if (nameSplit.length > 1)
-                name = nameSplit[1].replace(/^\s+|\s+$/g, "");
-              var logoMatch = line.match(/tvg-logo="(.*?)"/);
-              if (logoMatch) logo = logoMatch[1];
-              var groupMatch = line.match(/group-title="(.*?)"/);
-              if (groupMatch) group = groupMatch[1];
-              currentItem = { name: name, logo: logo, category: group };
-            } else if (line && line.indexOf("#") !== 0 && currentItem) {
-              currentItem.url = line;
-              masterItems.push(currentItem);
-              currentItem = null;
+      try {
+          xhr.open("GET", dataSourceUrl, true);
+          xhr.onreadystatechange = function () {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200 || xhr.status === 304) {
+                  var lines = xhr.responseText.split("\n");
+                  var currentItem = null;
+                  for (var i = 0; i < lines.length; i++) {
+                    var line = lines[i].replace(/^\s+|\s+$/g, "");
+                    if (line.indexOf("#EXTINF") === 0) {
+                      var name = "Unknown Channel", logo = "", group = "Others";
+                      var nameSplit = line.split(",");
+                      if (nameSplit.length > 1) name = nameSplit[1].replace(/^\s+|\s+$/g, "");
+                      var logoMatch = line.match(/tvg-logo="(.*?)"/);
+                      if (logoMatch) logo = logoMatch[1];
+                      var groupMatch = line.match(/group-title="(.*?)"/);
+                      if (groupMatch) group = groupMatch[1];
+                      currentItem = { name: name, logo: logo, category: group };
+                    } else if (line && line.indexOf("#") !== 0 && currentItem) {
+                      currentItem.url = line;
+                      masterItems.push(currentItem);
+                      currentItem = null;
+                    }
+                  }
+                  
+                  if(masterItems.length === 0) {
+                      assetGrid.innerHTML = "<div style='color:#ccc; padding:30px; text-align:center; width:100%; font-size:18px;'>No channels loaded.<br>The playlist is empty.</div>";
+                  } else {
+                      switchCategory("All", document.querySelector(".cat-btn.active"));
+                      updateCategoryFocus();
+                  }
+                } else {
+                    assetGrid.innerHTML = "<div style='color:#ff5555; padding:30px; text-align:center; width:100%; font-size:18px;'>Failed to load playlist (Status: " + xhr.status + ").<br>The TV might be blocking the connection due to outdated SSL/TLS.</div>";
+                }
             }
-          }
-          switchCategory("All", document.querySelector(".cat-btn.active"));
-          updateCategoryFocus();
-        }
-      };
-      xhr.send();
+          };
+          xhr.onerror = function() {
+              assetGrid.innerHTML = "<div style='color:#ff5555; padding:30px; text-align:center; width:100%; font-size:18px;'>Network Error loading channels.<br>Possible TLS/SSL issue on old TV. Try hosting the M3U locally.</div>";
+          };
+          xhr.send();
+      } catch(ex) {
+          console.log("XHR Init Error:", ex);
+      }
 
       function switchCategory(categoryName, element) {
         var buttons = document.querySelectorAll(".cat-btn");
@@ -823,7 +859,6 @@
           }
         }
         buildGrid();
-
         if (initialLoad && displayItems.length > 0) {
           initialLoad = false;
           streamSource(displayItems[0]);
@@ -849,10 +884,8 @@
         for (var i = 0; i < displayItems.length; i++) {
           var item = displayItems[i];
           var card = document.createElement("div");
-          var extraClass =
-            activeChannel && activeChannel.url === item.url
-              ? " active-item"
-              : "";
+          var extraClass = activeChannel && activeChannel.url === item.url ? " active-item" : "";
+          
           card.className = "item-card" + extraClass;
 
           var innerHTMLStr = "";
@@ -876,6 +909,7 @@
               streamSource(currentItem);
             };
           })(item, i);
+          
           assetGrid.appendChild(card);
         }
       }
@@ -884,7 +918,6 @@
         assetGrid.scrollTop += dir * 250;
       }
 
-      // Super Fast Playback Logic Fix
       function streamSource(item) {
         if (!item) return;
         activeChannel = item;
@@ -892,22 +925,21 @@
         var targetUrl = item.url;
         var startPlayback = function () {
           var playPromise = corePlayer.play();
-          if (playPromise !== undefined) {
-            playPromise.catch(function (error) {
+          // FIX 6: Changed .catch to ["catch"] to bypass legacy keyword parser blocks
+          if (playPromise !== undefined && typeof playPromise["catch"] === "function") {
+            playPromise["catch"](function (error) {
               console.log(error);
             });
           }
         };
 
         if (typeof Hls !== "undefined" && Hls.isSupported()) {
-          // Keep Hls instance alive for faster switching
           if (!hlsPlayer) {
             hlsPlayer = new Hls({ lowLatencyMode: true });
             hlsPlayer.attachMedia(corePlayer);
           }
           hlsPlayer.loadSource(targetUrl);
           hlsPlayer.on(Hls.Events.MANIFEST_PARSED, startPlayback);
-          startPlayback(); // Aggressively start for instant play
         } else if (corePlayer.canPlayType("application/vnd.apple.mpegurl")) {
           corePlayer.src = targetUrl;
           corePlayer.addEventListener("loadedmetadata", startPlayback);
@@ -923,9 +955,11 @@
           if (displayItems[j] && displayItems[j].url === item.url) {
             cards[j].className += " active-item";
             try {
-              cards[j].scrollIntoView({ behavior: "smooth", block: "nearest" });
+              if (cards[j].scrollIntoView) {
+                cards[j].scrollIntoView({ behavior: "smooth", block: "nearest" });
+              }
             } catch(e) {
-              cards[j].scrollIntoView(false);
+              if (cards[j].scrollIntoView) cards[j].scrollIntoView(false);
             }
           }
         }
@@ -995,26 +1029,29 @@
       corePlayer.addEventListener("play", function () {
         playPauseIcon.className = "fa-solid fa-pause";
       });
+
       corePlayer.addEventListener("pause", function () {
         playPauseIcon.className = "fa-solid fa-play";
       });
+
       corePlayer.addEventListener("timeupdate", function () {
         if (corePlayer.duration && corePlayer.duration !== Infinity) {
           var curM = Math.floor(corePlayer.currentTime / 60),
             curS = Math.floor(corePlayer.currentTime % 60);
           var durM = Math.floor(corePlayer.duration / 60),
             durS = Math.floor(corePlayer.duration % 60);
-          timeDisplay.innerText =
+          timeDisplay.innerHTML =
             curM + ":" + padZero(curS) + " / " + durM + ":" + padZero(durS);
         } else {
-          timeDisplay.innerText = "LIVE STREAM";
+          timeDisplay.innerHTML = "LIVE STREAM";
         }
       });
+
       function togglePlayPause() {
         if (corePlayer.paused) {
           var playPromise = corePlayer.play();
-          if (playPromise !== undefined) {
-            playPromise.catch(function () {});
+          if (playPromise !== undefined && typeof playPromise["catch"] === "function") {
+            playPromise["catch"](function () {});
           }
         } else {
           corePlayer.pause();
@@ -1058,7 +1095,7 @@
           }
           maximizeIcon.className = "fa-solid fa-compress";
           if (activeChannel) {
-            channelToast.innerText = activeChannel.name;
+            channelToast.innerHTML = activeChannel.name;
             if (channelToast.className.indexOf("show") === -1) {
               channelToast.className += " show";
             }
@@ -1080,43 +1117,52 @@
         }
         triggerControlsOverlay();
       };
+
       document.addEventListener("fullscreenchange", syncFullscreenState);
       document.addEventListener("webkitfullscreenchange", syncFullscreenState);
       viewportSection.addEventListener("mousemove", triggerControlsOverlay);
+      
       viewportSection.addEventListener("click", function () {
         optionsMenu.className = optionsMenu.className.replace(" active", "");
         triggerControlsOverlay();
       });
+
       viewportSection.addEventListener("dblclick", function (e) {
-        e.preventDefault();
-        e.stopPropagation();
+        if(e && e.preventDefault) e.preventDefault();
+        if(e && e.stopPropagation) e.stopPropagation();
         toggleMaximizeMode();
       });
+
       corePlayer.addEventListener("dblclick", function (e) {
-        e.preventDefault();
-        e.stopPropagation();
+        if(e && e.preventDefault) e.preventDefault();
+        if(e && e.stopPropagation) e.stopPropagation();
         toggleMaximizeMode();
       });
+
       document.addEventListener("click", function () {
         optionsMenu.className = optionsMenu.className.replace(" active", "");
       });
 
-      // ES5 TV SPATIAL NAVIGATION LOGIC Fix for Vewd
+      // ES5 TV SPATIAL NAVIGATION LOGIC
       function updateCategoryFocus() {
         var btns = document.querySelectorAll(".cat-btn");
         for (var i = 0; i < btns.length; i++) {
-          btns[i].classList.remove("tv-focused");
+          rClass(btns[i], "tv-focused");
         }
         if (btns[currentCategoryIndex]) {
-          btns[currentCategoryIndex].classList.add("tv-focused");
+          aClass(btns[currentCategoryIndex], "tv-focused");
           try {
-            btns[currentCategoryIndex].scrollIntoView({
-              behavior: "smooth",
-              inline: "center",
-              block: "nearest"
-            });
+            if(btns[currentCategoryIndex].scrollIntoView) {
+                btns[currentCategoryIndex].scrollIntoView({
+                  behavior: "smooth",
+                  inline: "center",
+                  block: "nearest"
+                });
+            }
           } catch(err) {
-            btns[currentCategoryIndex].scrollIntoView(false);
+            if(btns[currentCategoryIndex].scrollIntoView) {
+                btns[currentCategoryIndex].scrollIntoView(false);
+            }
           }
         }
       }
@@ -1124,17 +1170,21 @@
       function updateGridFocus() {
         var cards = document.querySelectorAll(".item-card");
         for (var i = 0; i < cards.length; i++) {
-          cards[i].classList.remove("tv-focused");
+          rClass(cards[i], "tv-focused");
         }
         if (cards[currentGridIndex]) {
-          cards[currentGridIndex].classList.add("tv-focused");
+          aClass(cards[currentGridIndex], "tv-focused");
           try {
-            cards[currentGridIndex].scrollIntoView({
-              behavior: "smooth",
-              block: "nearest"
-            });
+            if (cards[currentGridIndex].scrollIntoView) {
+                cards[currentGridIndex].scrollIntoView({
+                  behavior: "smooth",
+                  block: "nearest"
+                });
+            }
           } catch(err) {
-            cards[currentGridIndex].scrollIntoView(false);
+            if (cards[currentGridIndex].scrollIntoView) {
+                cards[currentGridIndex].scrollIntoView(false);
+            }
           }
         }
       }
@@ -1146,7 +1196,7 @@
           [37, 38, 39, 40].indexOf(e.keyCode) > -1 &&
           document.activeElement.tagName !== "INPUT"
         ) {
-          e.preventDefault();
+          if(e.preventDefault) e.preventDefault();
         }
 
         if (e.keyCode === 427 || e.keyCode === 33 || e.key === "ChannelUp") {
@@ -1168,33 +1218,33 @@
         // UP
         if (e.keyCode === 38) {
           if (currentFocusArea === "grid") {
-            if (currentGridIndex >= 3) {
+             if (currentGridIndex >= 3) {
               currentGridIndex -= 3;
               updateGridFocus();
             } else {
               currentFocusArea = "category";
-              for (var c1 = 0; c1 < cards.length; c1++) cards[c1].classList.remove("tv-focused");
+              for (var c1 = 0; c1 < cards.length; c1++) rClass(cards[c1], "tv-focused");
               updateCategoryFocus();
             }
           } else if (currentFocusArea === "category") {
             currentFocusArea = "search";
-            for (var b1 = 0; b1 < catBtns.length; b1++) catBtns[b1].classList.remove("tv-focused");
-            searchInput.focus();
-            searchInput.classList.add("tv-focused");
+            for (var b1 = 0; b1 < catBtns.length; b1++) rClass(catBtns[b1], "tv-focused");
+            if(searchInput.focus) searchInput.focus();
+            aClass(searchInput, "tv-focused");
           }
         }
         // DOWN
         else if (e.keyCode === 40) {
           if (currentFocusArea === "search") {
-            searchInput.blur();
-            searchInput.classList.remove("tv-focused");
+            if(searchInput.blur) searchInput.blur();
+            rClass(searchInput, "tv-focused");
             currentFocusArea = "category";
             updateCategoryFocus();
           } else if (currentFocusArea === "category") {
             if (cards.length > 0) {
               currentFocusArea = "grid";
               currentGridIndex = 0;
-              updateGridFocus(); // Sirf hover hobe, play hobe na
+              updateGridFocus();
             }
           } else if (currentFocusArea === "grid") {
             if (currentGridIndex + 3 < cards.length) {
@@ -1208,7 +1258,7 @@
           if (currentFocusArea === "category" && currentCategoryIndex > 0) {
             currentCategoryIndex--;
             updateCategoryFocus();
-            catBtns[currentCategoryIndex].click(); 
+            if(catBtns[currentCategoryIndex].click) catBtns[currentCategoryIndex].click(); 
           } else if (currentFocusArea === "grid" && currentGridIndex > 0) {
             currentGridIndex--;
             updateGridFocus();
@@ -1222,7 +1272,7 @@
           ) {
             currentCategoryIndex++;
             updateCategoryFocus();
-            catBtns[currentCategoryIndex].click(); 
+            if(catBtns[currentCategoryIndex].click) catBtns[currentCategoryIndex].click(); 
           } else if (
             currentFocusArea === "grid" &&
             currentGridIndex < cards.length - 1
@@ -1234,11 +1284,11 @@
         // ENTER / OK BUTTON
         else if (e.keyCode === 13) {
           if (currentFocusArea === "grid" && cards.length > 0) {
-            streamSource(displayItems[currentGridIndex]); // Ekhon sathe sathe play hobe
+            streamSource(displayItems[currentGridIndex]);
           } else if (currentFocusArea === "category") {
-            catBtns[currentCategoryIndex].click();
+            if(catBtns[currentCategoryIndex].click) catBtns[currentCategoryIndex].click();
           } else if (currentFocusArea === "search") {
-            searchInput.focus();
+            if(searchInput.focus) searchInput.focus();
           }
         }
       });
