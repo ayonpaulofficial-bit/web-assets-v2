@@ -428,15 +428,11 @@
 
       function scrollGrid(dir) { assetGrid.scrollTop += dir * 250; }
 
-      // --- SUPER FAST PLAYBACK LOGIC (Vewd/HbbTV Optimized) ---
-      var pendingUrl = null;
-
       function streamSource(item) {
         if (!item) return;
         activeChannel = item;
-        pendingUrl = item.url;
 
-        // Update active card UI immediately - don't wait for stream
+        // Update active card UI immediately
         var cards = document.querySelectorAll(".item-card");
         for (var j = 0; j < cards.length; j++) {
           cards[j].className = cards[j].className.replace(" active-item", "");
@@ -448,49 +444,27 @@
 
         var targetUrl = item.url;
 
-        // Fast destroy and reload
+        // Destroy previous hls instance before creating new one
         if (hlsPlayer) {
           hlsPlayer.destroy();
           hlsPlayer = null;
         }
-        corePlayer.pause();
-        corePlayer.removeAttribute("src");
-        // Force immediate resource release
-        try { corePlayer.load(); } catch(e) {}
 
-        // Vewd/HbbTV: native HLS support — use direct src for fastest startup
-        if (corePlayer.canPlayType("application/vnd.apple.mpegurl") || corePlayer.canPlayType("application/x-mpegURL")) {
+        if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+          hlsPlayer = new Hls();
+          hlsPlayer.loadSource(targetUrl);
+          hlsPlayer.attachMedia(corePlayer);
+          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, function() {
+            var playPromise = corePlayer.play();
+            if (playPromise !== undefined) { playPromise.catch(function() {}); }
+          });
+        } else if (corePlayer.canPlayType("application/vnd.apple.mpegurl")) {
           corePlayer.src = targetUrl;
           corePlayer.load();
           var playPromise = corePlayer.play();
           if (playPromise !== undefined) { playPromise.catch(function() {}); }
-
-        } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-          // Desktop/Chrome fallback with low-latency config
-          hlsPlayer = new Hls({
-            enableWorker: true,
-            lowLatencyMode: true,
-            backBufferLength: 0,
-            maxBufferLength: 10,
-            maxMaxBufferLength: 20,
-            maxBufferSize: 20 * 1000 * 1000,
-            startPosition: -1,
-            liveSyncDurationCount: 1,
-            liveMaxLatencyDurationCount: 3
-          });
-          hlsPlayer.loadSource(targetUrl);
-          hlsPlayer.attachMedia(corePlayer);
-          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, function() {
-            // Only play if this is still the pending channel
-            if (pendingUrl === targetUrl) {
-              var playPromise = corePlayer.play();
-              if (playPromise !== undefined) { playPromise.catch(function() {}); }
-            }
-          });
-
         } else {
           corePlayer.src = targetUrl;
-          corePlayer.load();
           var p = corePlayer.play();
           if (p !== undefined) { p.catch(function() {}); }
         }
