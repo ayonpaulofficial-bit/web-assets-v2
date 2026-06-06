@@ -68,13 +68,14 @@
         font-weight: 600;
         font-family: monospace;
       }
-      /* PM Drop fixed with white-space and increased width */
+      /* PM Drop completely fixed with larger min-width */
       #liveClock {
         display: inline-block;
-        width: 330px;
+        min-width: 380px; 
         text-align: right;
         letter-spacing: 1px;
         white-space: nowrap;
+        overflow: visible;
       }
       .analog-clock-wrapper {
         width: 90px;
@@ -91,7 +92,7 @@
         display: block;
       }
 
-      /* --- MAIN LAYOUT (PC & TV) --- */
+      /* --- MAIN LAYOUT --- */
       .main-container {
         display: flex;
         flex: 1;
@@ -230,8 +231,6 @@
         opacity: 1;
       }
 
-      /* Left/Right arrows removed from player as requested */
-
       .options-menu {
         position: absolute;
         bottom: 55px;
@@ -300,9 +299,11 @@
         color: #fff;
         outline: none;
       }
-      .search-container input:focus {
-        border-color: #555;
+      .search-container input:focus,
+      #searchInput.tv-focused {
+        border-color: #ffffff;
         background: #141414;
+        box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
       }
 
       .scroll-controls-side {
@@ -460,74 +461,6 @@
         background: #2a2a2a;
         box-shadow: 0 0 15px rgba(255, 255, 255, 0.4) !important;
         color: #ffffff !important;
-      }
-
-      /* --- MOBILE STACKED LAYOUT --- */
-      @media (max-width: 768px) {
-        body {
-          overflow-y: auto;
-          display: block;
-          height: auto;
-        }
-        .header {
-          height: 70px;
-          padding: 10px 15px;
-          justify-content: center;
-        }
-        .header h1 {
-          font-size: 24px;
-        }
-        .live-clock-container {
-          display: none !important;
-        }
-        .main-container {
-          flex-direction: column;
-          height: auto;
-          overflow: visible;
-          display: block;
-        }
-        .viewport-section {
-          width: 100% !important;
-          height: 35vh;
-          min-height: 250px;
-          position: sticky;
-          top: 0;
-          z-index: 999;
-        }
-        .sidebar {
-          width: 100% !important;
-          height: auto;
-          border-left: none;
-          padding-right: 0 !important;
-          overflow: visible;
-        }
-        .scroll-controls-side {
-          display: none;
-        }
-        .category-container {
-          padding: 10px 15px;
-        }
-        .asset-grid {
-          padding: 0 15px 30px 15px !important;
-          overflow-y: visible;
-          height: auto;
-          gap: 10px;
-          justify-content: flex-start;
-        }
-        .item-card {
-          width: calc(50% - 5px) !important;
-          height: 120px;
-          margin: 0;
-        }
-        .custom-controls-bar {
-          padding: 15px 20px;
-        }
-        .volume-container {
-          display: none;
-        }
-        .time-display {
-          display: none;
-        }
       }
     </style>
   </head>
@@ -704,8 +637,7 @@
       var initialLoad = true;
       var previousVolume = 1;
 
-      // TV Navigation States
-      var currentFocusArea = "category"; // 'search', 'category', 'grid'
+      var currentFocusArea = "category"; 
       var currentCategoryIndex = 0;
       var currentGridIndex = 0;
 
@@ -757,9 +689,10 @@
           ctx.fillText(num.toString(), nx, ny);
         }
 
-        var now = new Date();
-        // TV Time Offset Fix (+30 mins)
-        now.setMinutes(now.getMinutes() + 30);
+        // TV Time 30 mins Off Fix -> Force BD Time (+6) exactly
+        var localNow = new Date();
+        var utcTime = localNow.getTime() + (localNow.getTimezoneOffset() * 60000);
+        var now = new Date(utcTime + (3600000 * 6));
 
         var hr = now.getHours() % 12;
         var min = now.getMinutes();
@@ -813,18 +746,8 @@
 
         var day = padZero(now.getDate());
         var months = [
-          "Jan",
-          "Feb",
-          "Mar",
-          "Apr",
-          "May",
-          "Jun",
-          "Jul",
-          "Aug",
-          "Sep",
-          "Oct",
-          "Nov",
-          "Dec",
+          "Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
         ];
         var month = months[now.getMonth()];
         var year = now.getFullYear();
@@ -875,7 +798,6 @@
             }
           }
           switchCategory("All", document.querySelector(".cat-btn.active"));
-          // Initial TV Category Focus Fix
           updateCategoryFocus();
         }
       };
@@ -887,7 +809,7 @@
           buttons[i].className = buttons[i].className.replace(" active", "");
         }
         if (element) {
-          buttons[i] = element.className += " active";
+          element.className += " active";
         }
 
         document.getElementById("searchInput").value = "";
@@ -902,7 +824,6 @@
         }
         buildGrid();
 
-        // Auto Play ONLY on the very first boot
         if (initialLoad && displayItems.length > 0) {
           initialLoad = false;
           streamSource(displayItems[0]);
@@ -963,14 +884,10 @@
         assetGrid.scrollTop += dir * 250;
       }
 
-      // Super Fast Playback Logic (Exact copy from 1st Best Website)
+      // Super Fast Playback Logic Fix
       function streamSource(item) {
         if (!item) return;
         activeChannel = item;
-        if (hlsPlayer) {
-          hlsPlayer.destroy();
-          hlsPlayer = null;
-        }
 
         var targetUrl = item.url;
         var startPlayback = function () {
@@ -983,13 +900,18 @@
         };
 
         if (typeof Hls !== "undefined" && Hls.isSupported()) {
-          hlsPlayer = new Hls();
+          // Keep Hls instance alive for faster switching
+          if (!hlsPlayer) {
+            hlsPlayer = new Hls({ lowLatencyMode: true });
+            hlsPlayer.attachMedia(corePlayer);
+          }
           hlsPlayer.loadSource(targetUrl);
-          hlsPlayer.attachMedia(corePlayer);
           hlsPlayer.on(Hls.Events.MANIFEST_PARSED, startPlayback);
+          startPlayback(); // Aggressively start for instant play
         } else if (corePlayer.canPlayType("application/vnd.apple.mpegurl")) {
           corePlayer.src = targetUrl;
           corePlayer.addEventListener("loadedmetadata", startPlayback);
+          startPlayback();
         } else {
           corePlayer.src = targetUrl;
           startPlayback();
@@ -1000,7 +922,11 @@
           cards[j].className = cards[j].className.replace(" active-item", "");
           if (displayItems[j] && displayItems[j].url === item.url) {
             cards[j].className += " active-item";
-            cards[j].scrollIntoView({ behavior: "smooth", block: "nearest" });
+            try {
+              cards[j].scrollIntoView({ behavior: "smooth", block: "nearest" });
+            } catch(e) {
+              cards[j].scrollIntoView(false);
+            }
           }
         }
       }
@@ -1059,7 +985,7 @@
         for (var i = 0; i < menuItems.length; i++) {
           menuItems[i].className = menuItems[i].className.replace(
             " active-speed",
-            "",
+            ""
           );
         }
         element.className += " active-speed";
@@ -1103,7 +1029,7 @@
         controlTimer = setTimeout(function () {
           customControlsBar.className = customControlsBar.className.replace(
             " show",
-            "",
+            ""
           );
           optionsMenu.className = optionsMenu.className.replace(" active", "");
         }, 3000);
@@ -1140,14 +1066,14 @@
             toastTimer = setTimeout(function () {
               channelToast.className = channelToast.className.replace(
                 " show",
-                "",
+                ""
               );
             }, 2500);
           }
         } else {
           viewportSection.className = viewportSection.className.replace(
             " maximized",
-            "",
+            ""
           );
           maximizeIcon.className = "fa-solid fa-expand";
           channelToast.className = channelToast.className.replace(" show", "");
@@ -1175,40 +1101,47 @@
         optionsMenu.className = optionsMenu.className.replace(" active", "");
       });
 
-      // TV SPATIAL NAVIGATION LOGIC
+      // ES5 TV SPATIAL NAVIGATION LOGIC Fix for Vewd
       function updateCategoryFocus() {
         var btns = document.querySelectorAll(".cat-btn");
-        btns.forEach(function (b) {
-          b.classList.remove("tv-focused");
-        });
+        for (var i = 0; i < btns.length; i++) {
+          btns[i].classList.remove("tv-focused");
+        }
         if (btns[currentCategoryIndex]) {
           btns[currentCategoryIndex].classList.add("tv-focused");
-          btns[currentCategoryIndex].scrollIntoView({
-            behavior: "smooth",
-            inline: "center",
-            block: "nearest",
-          });
+          try {
+            btns[currentCategoryIndex].scrollIntoView({
+              behavior: "smooth",
+              inline: "center",
+              block: "nearest"
+            });
+          } catch(err) {
+            btns[currentCategoryIndex].scrollIntoView(false);
+          }
         }
       }
 
       function updateGridFocus() {
         var cards = document.querySelectorAll(".item-card");
-        cards.forEach(function (c) {
-          c.classList.remove("tv-focused");
-        });
+        for (var i = 0; i < cards.length; i++) {
+          cards[i].classList.remove("tv-focused");
+        }
         if (cards[currentGridIndex]) {
           cards[currentGridIndex].classList.add("tv-focused");
-          cards[currentGridIndex].scrollIntoView({
-            behavior: "smooth",
-            block: "nearest",
-          });
+          try {
+            cards[currentGridIndex].scrollIntoView({
+              behavior: "smooth",
+              block: "nearest"
+            });
+          } catch(err) {
+            cards[currentGridIndex].scrollIntoView(false);
+          }
         }
       }
 
       document.addEventListener("keydown", function (e) {
         triggerControlsOverlay();
 
-        // Disable default scroll for arrows
         if (
           [37, 38, 39, 40].indexOf(e.keyCode) > -1 &&
           document.activeElement.tagName !== "INPUT"
@@ -1216,7 +1149,6 @@
           e.preventDefault();
         }
 
-        // Channel +/- remote keys (Preserved)
         if (e.keyCode === 427 || e.keyCode === 33 || e.key === "ChannelUp") {
           changeChannel(1);
           return;
@@ -1241,30 +1173,28 @@
               updateGridFocus();
             } else {
               currentFocusArea = "category";
-              cards.forEach(function (c) {
-                c.classList.remove("tv-focused");
-              });
+              for (var c1 = 0; c1 < cards.length; c1++) cards[c1].classList.remove("tv-focused");
               updateCategoryFocus();
             }
           } else if (currentFocusArea === "category") {
             currentFocusArea = "search";
-            catBtns.forEach(function (b) {
-              b.classList.remove("tv-focused");
-            });
+            for (var b1 = 0; b1 < catBtns.length; b1++) catBtns[b1].classList.remove("tv-focused");
             searchInput.focus();
+            searchInput.classList.add("tv-focused");
           }
         }
         // DOWN
         else if (e.keyCode === 40) {
           if (currentFocusArea === "search") {
             searchInput.blur();
+            searchInput.classList.remove("tv-focused");
             currentFocusArea = "category";
             updateCategoryFocus();
           } else if (currentFocusArea === "category") {
             if (cards.length > 0) {
               currentFocusArea = "grid";
               currentGridIndex = 0;
-              updateGridFocus();
+              updateGridFocus(); // Sirf hover hobe, play hobe na
             }
           } else if (currentFocusArea === "grid") {
             if (currentGridIndex + 3 < cards.length) {
@@ -1278,7 +1208,7 @@
           if (currentFocusArea === "category" && currentCategoryIndex > 0) {
             currentCategoryIndex--;
             updateCategoryFocus();
-            catBtns[currentCategoryIndex].click(); // Instantly loads channels below
+            catBtns[currentCategoryIndex].click(); 
           } else if (currentFocusArea === "grid" && currentGridIndex > 0) {
             currentGridIndex--;
             updateGridFocus();
@@ -1292,7 +1222,7 @@
           ) {
             currentCategoryIndex++;
             updateCategoryFocus();
-            catBtns[currentCategoryIndex].click(); // Instantly loads channels below
+            catBtns[currentCategoryIndex].click(); 
           } else if (
             currentFocusArea === "grid" &&
             currentGridIndex < cards.length - 1
@@ -1304,9 +1234,11 @@
         // ENTER / OK BUTTON
         else if (e.keyCode === 13) {
           if (currentFocusArea === "grid" && cards.length > 0) {
-            streamSource(displayItems[currentGridIndex]); // Plays exactly on click
+            streamSource(displayItems[currentGridIndex]); // Ekhon sathe sathe play hobe
           } else if (currentFocusArea === "category") {
             catBtns[currentCategoryIndex].click();
+          } else if (currentFocusArea === "search") {
+            searchInput.focus();
           }
         }
       });
