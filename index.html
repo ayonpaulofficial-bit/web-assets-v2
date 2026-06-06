@@ -36,6 +36,17 @@
         user-select: none;
       }
 
+      /* Kills native Vewd TV left/right video control arrows */
+      video::-webkit-media-controls {
+        display: none !important;
+      }
+      video::-webkit-media-controls-enclosure {
+        display: none !important;
+      }
+      video::-webkit-media-controls-panel {
+        display: none !important;
+      }
+
       /* --- HEADER --- */
       .header {
         background: #050505;
@@ -67,10 +78,11 @@
         font-size: 22px;
         font-weight: 600;
         font-family: monospace;
+        flex-wrap: nowrap;
       }
       #liveClock {
         display: inline-block;
-        min-width: 380px; 
+        min-width: 420px; /* Fixed PM dropping issue */
         text-align: right;
         letter-spacing: 1px;
         white-space: nowrap;
@@ -114,6 +126,7 @@
         background: #000;
         object-fit: contain;
         cursor: pointer;
+        outline: none;
       }
       .viewport-section.maximized {
         width: 100%;
@@ -303,40 +316,6 @@
         box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
       }
 
-      .scroll-controls-side {
-        position: absolute;
-        right: 15px;
-        top: 50%;
-        transform: translateY(-50%);
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-        z-index: 50;
-      }
-      .scroll-btn {
-        background: #141414;
-        color: #aaa;
-        border: 1px solid #252525;
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        cursor: pointer;
-        font-size: 18px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        transition: all 0.2s;
-        outline: none;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
-      }
-      .scroll-btn:hover,
-      .scroll-btn:focus {
-        background: #252525;
-        color: #fff;
-        border-color: #555;
-        transform: scale(1.08);
-      }
-
       .category-container {
         display: flex;
         flex-wrap: nowrap;
@@ -406,13 +385,6 @@
         cursor: pointer;
         transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
         outline: none;
-      }
-      .item-card:hover,
-      .item-card:focus {
-        background: #1a1a1a;
-        border-color: #666;
-        transform: scale(1.03);
-        box-shadow: 0 4px 15px rgba(255, 255, 255, 0.05);
       }
       .item-card img {
         max-width: 100%;
@@ -544,15 +516,6 @@
           />
         </div>
 
-        <div class="scroll-controls-side">
-          <button class="scroll-btn" onclick="scrollGrid(-1)">
-            <i class="fa-solid fa-arrow-up"></i>
-          </button>
-          <button class="scroll-btn" onclick="scrollGrid(1)">
-            <i class="fa-solid fa-arrow-down"></i>
-          </button>
-        </div>
-
         <div class="category-container" id="categoryContainer">
           <button class="cat-btn active" onclick="switchCategory('All', this)">
             All
@@ -597,21 +560,14 @@
     </div>
 
     <script>
-      // FIX 2: Prevent unhandled console crashes in extremely old engines
       if (typeof window.console === "undefined") {
-        window.console = {
-          log: function () {},
-          error: function () {},
-          warn: function () {},
-          info: function () {}
-        };
+        window.console = { log: function () {}, error: function () {}, warn: function () {}, info: function () {} };
       }
 
       document.addEventListener("contextmenu", function (e) {
         if(e && e.preventDefault) e.preventDefault();
       });
 
-      // FIX 3: Safe Class Toggling replacements for the buggy TV classList API
       function aClass(el, cls) {
         if (!el) return;
         if (el.className.indexOf(cls) === -1) {
@@ -661,11 +617,13 @@
       var currentCategoryIndex = 0;
       var currentGridIndex = 0;
 
-      // FIX 4: Canvas Crash Protection. Ensure digital clock updates first.
       function updatePremiumClock() {
         var localNow = new Date();
         var utcTime = localNow.getTime() + (localNow.getTimezoneOffset() * 60000);
-        var now = new Date(utcTime + (3600000 * 6));
+        
+        // BD TIME + 30 MINUTE BUG FIX APPLIED HERE
+        var fixOffsetMs = 1800000; // +30 Minutes in milliseconds
+        var now = new Date(utcTime + (3600000 * 6) + fixOffsetMs);
 
         var day = padZero(now.getDate());
         var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -780,20 +738,12 @@
                 ctx.stroke();
                 ctx.restore();
             }
-        } catch(err) {
-            // Silently ignore canvas errors so the app keeps running
-        }
+        } catch(err) {}
       }
 
       setInterval(updatePremiumClock, 1000);
       updatePremiumClock();
 
-      categoryContainer.addEventListener("wheel", function (e) {
-        if(e && e.preventDefault) e.preventDefault();
-        categoryContainer.scrollLeft += e.deltaX || e.deltaY;
-      });
-
-      // FIX 5: UI Error reporting for blocked TV connections
       var xhr = new XMLHttpRequest();
       try {
           xhr.open("GET", dataSourceUrl, true);
@@ -821,44 +771,36 @@
                   }
                   
                   if(masterItems.length === 0) {
-                      assetGrid.innerHTML = "<div style='color:#ccc; padding:30px; text-align:center; width:100%; font-size:18px;'>No channels loaded.<br>The playlist is empty.</div>";
+                      assetGrid.innerHTML = "<div style='color:#ccc; padding:30px; text-align:center; width:100%; font-size:18px;'>No channels loaded.</div>";
                   } else {
                       switchCategory("All", document.querySelector(".cat-btn.active"));
                       updateCategoryFocus();
                   }
-                } else {
-                    assetGrid.innerHTML = "<div style='color:#ff5555; padding:30px; text-align:center; width:100%; font-size:18px;'>Failed to load playlist (Status: " + xhr.status + ").<br>The TV might be blocking the connection due to outdated SSL/TLS.</div>";
                 }
             }
           };
-          xhr.onerror = function() {
-              assetGrid.innerHTML = "<div style='color:#ff5555; padding:30px; text-align:center; width:100%; font-size:18px;'>Network Error loading channels.<br>Possible TLS/SSL issue on old TV. Try hosting the M3U locally.</div>";
-          };
           xhr.send();
-      } catch(ex) {
-          console.log("XHR Init Error:", ex);
-      }
+      } catch(ex) {}
 
       function switchCategory(categoryName, element) {
         var buttons = document.querySelectorAll(".cat-btn");
         for (var i = 0; i < buttons.length; i++) {
-          buttons[i].className = buttons[i].className.replace(" active", "");
+          rClass(buttons[i], "active");
         }
         if (element) {
-          element.className += " active";
+          aClass(element, "active");
         }
 
         document.getElementById("searchInput").value = "";
         displayItems = [];
         for (var j = 0; j < masterItems.length; j++) {
-          if (
-            categoryName === "All" ||
-            masterItems[j].category.toLowerCase() === categoryName.toLowerCase()
-          ) {
+          if (categoryName === "All" || masterItems[j].category.toLowerCase() === categoryName.toLowerCase()) {
             displayItems.push(masterItems[j]);
           }
         }
         buildGrid();
+        
+        // Autoplay ONLY on the very first TV load
         if (initialLoad && displayItems.length > 0) {
           initialLoad = false;
           streamSource(displayItems[0]);
@@ -890,12 +832,7 @@
 
           var innerHTMLStr = "";
           if (item.logo) {
-            innerHTMLStr =
-              '<img src="' +
-              item.logo +
-              '" onerror="this.style.display=\'none\'"><span>' +
-              item.name +
-              "</span>";
+            innerHTMLStr = '<img src="' + item.logo + '" onerror="this.style.display=\'none\'"><span>' + item.name + "</span>";
           } else {
             innerHTMLStr = "<span>" + item.name + "</span>";
           }
@@ -906,7 +843,7 @@
               currentFocusArea = "grid";
               currentGridIndex = index;
               updateGridFocus();
-              streamSource(currentItem);
+              streamSource(currentItem); // ONLY plays on manual click or Enter button
             };
           })(item, i);
           
@@ -914,31 +851,28 @@
         }
       }
 
-      function scrollGrid(dir) {
-        assetGrid.scrollTop += dir * 250;
-      }
-
+      // SUPER FAST STREAM LOADING LOGIC
       function streamSource(item) {
         if (!item) return;
         activeChannel = item;
-
         var targetUrl = item.url;
+
         var startPlayback = function () {
           var playPromise = corePlayer.play();
-          // FIX 6: Changed .catch to ["catch"] to bypass legacy keyword parser blocks
           if (playPromise !== undefined && typeof playPromise["catch"] === "function") {
-            playPromise["catch"](function (error) {
-              console.log(error);
-            });
+            playPromise["catch"](function () {});
           }
         };
 
         if (typeof Hls !== "undefined" && Hls.isSupported()) {
-          if (!hlsPlayer) {
-            hlsPlayer = new Hls({ lowLatencyMode: true });
-            hlsPlayer.attachMedia(corePlayer);
+          // Destroys the old stream entirely to free up Vewd memory and prevent locking
+          if (hlsPlayer) {
+            hlsPlayer.destroy();
+            hlsPlayer = null;
           }
+          hlsPlayer = new Hls(); 
           hlsPlayer.loadSource(targetUrl);
+          hlsPlayer.attachMedia(corePlayer);
           hlsPlayer.on(Hls.Events.MANIFEST_PARSED, startPlayback);
         } else if (corePlayer.canPlayType("application/vnd.apple.mpegurl")) {
           corePlayer.src = targetUrl;
@@ -949,18 +883,12 @@
           startPlayback();
         }
 
+        // Visual Active Class Update
         var cards = document.querySelectorAll(".item-card");
         for (var j = 0; j < cards.length; j++) {
-          cards[j].className = cards[j].className.replace(" active-item", "");
+          rClass(cards[j], "active-item");
           if (displayItems[j] && displayItems[j].url === item.url) {
-            cards[j].className += " active-item";
-            try {
-              if (cards[j].scrollIntoView) {
-                cards[j].scrollIntoView({ behavior: "smooth", block: "nearest" });
-              }
-            } catch(e) {
-              if (cards[j].scrollIntoView) cards[j].scrollIntoView(false);
-            }
+            aClass(cards[j], "active-item");
           }
         }
       }
@@ -977,8 +905,7 @@
           }
         }
         if (currentIdx !== -1) {
-          var targetIdx =
-            (currentIdx + step + displayItems.length) % displayItems.length;
+          var targetIdx = (currentIdx + step + displayItems.length) % displayItems.length;
           streamSource(displayItems[targetIdx]);
         }
       }
@@ -1007,9 +934,9 @@
       function toggleOptionsMenu(event) {
         event.stopPropagation();
         if (optionsMenu.className.indexOf("active") !== -1) {
-          optionsMenu.className = optionsMenu.className.replace(" active", "");
+          rClass(optionsMenu, "active");
         } else {
-          optionsMenu.className += " active";
+          aClass(optionsMenu, "active");
         }
       }
 
@@ -1017,13 +944,10 @@
         corePlayer.playbackRate = speedVal;
         var menuItems = document.querySelectorAll(".menu-item");
         for (var i = 0; i < menuItems.length; i++) {
-          menuItems[i].className = menuItems[i].className.replace(
-            " active-speed",
-            ""
-          );
+          rClass(menuItems[i], "active-speed");
         }
-        element.className += " active-speed";
-        optionsMenu.className = optionsMenu.className.replace(" active", "");
+        aClass(element, "active-speed");
+        rClass(optionsMenu, "active");
       }
 
       corePlayer.addEventListener("play", function () {
@@ -1040,8 +964,7 @@
             curS = Math.floor(corePlayer.currentTime % 60);
           var durM = Math.floor(corePlayer.duration / 60),
             durS = Math.floor(corePlayer.duration % 60);
-          timeDisplay.innerHTML =
-            curM + ":" + padZero(curS) + " / " + durM + ":" + padZero(durS);
+          timeDisplay.innerHTML = curM + ":" + padZero(curS) + " / " + durM + ":" + padZero(durS);
         } else {
           timeDisplay.innerHTML = "LIVE STREAM";
         }
@@ -1060,15 +983,12 @@
 
       function triggerControlsOverlay() {
         if (customControlsBar.className.indexOf("show") === -1) {
-          customControlsBar.className += " show";
+          aClass(customControlsBar, "show");
         }
         clearTimeout(controlTimer);
         controlTimer = setTimeout(function () {
-          customControlsBar.className = customControlsBar.className.replace(
-            " show",
-            ""
-          );
-          optionsMenu.className = optionsMenu.className.replace(" active", "");
+          rClass(customControlsBar, "show");
+          rClass(optionsMenu, "active");
         }, 3000);
       }
 
@@ -1091,29 +1011,23 @@
       var syncFullscreenState = function () {
         if (document.fullscreenElement || document.webkitFullscreenElement) {
           if (viewportSection.className.indexOf("maximized") === -1) {
-            viewportSection.className += " maximized";
+            aClass(viewportSection, "maximized");
           }
           maximizeIcon.className = "fa-solid fa-compress";
           if (activeChannel) {
             channelToast.innerHTML = activeChannel.name;
             if (channelToast.className.indexOf("show") === -1) {
-              channelToast.className += " show";
+              aClass(channelToast, "show");
             }
             clearTimeout(toastTimer);
             toastTimer = setTimeout(function () {
-              channelToast.className = channelToast.className.replace(
-                " show",
-                ""
-              );
+              rClass(channelToast, "show");
             }, 2500);
           }
         } else {
-          viewportSection.className = viewportSection.className.replace(
-            " maximized",
-            ""
-          );
+          rClass(viewportSection, "maximized");
           maximizeIcon.className = "fa-solid fa-expand";
-          channelToast.className = channelToast.className.replace(" show", "");
+          rClass(channelToast, "show");
         }
         triggerControlsOverlay();
       };
@@ -1123,68 +1037,51 @@
       viewportSection.addEventListener("mousemove", triggerControlsOverlay);
       
       viewportSection.addEventListener("click", function () {
-        optionsMenu.className = optionsMenu.className.replace(" active", "");
+        rClass(optionsMenu, "active");
         triggerControlsOverlay();
       });
 
       viewportSection.addEventListener("dblclick", function (e) {
         if(e && e.preventDefault) e.preventDefault();
-        if(e && e.stopPropagation) e.stopPropagation();
         toggleMaximizeMode();
       });
 
       corePlayer.addEventListener("dblclick", function (e) {
         if(e && e.preventDefault) e.preventDefault();
-        if(e && e.stopPropagation) e.stopPropagation();
         toggleMaximizeMode();
       });
 
       document.addEventListener("click", function () {
-        optionsMenu.className = optionsMenu.className.replace(" active", "");
+        rClass(optionsMenu, "active");
       });
 
-      // ES5 TV SPATIAL NAVIGATION LOGIC
+      // EXACT TV NAVIGATION LOGIC
       function updateCategoryFocus() {
         var btns = document.querySelectorAll(".cat-btn");
-        for (var i = 0; i < btns.length; i++) {
-          rClass(btns[i], "tv-focused");
-        }
+        for (var i = 0; i < btns.length; i++) rClass(btns[i], "tv-focused");
         if (btns[currentCategoryIndex]) {
           aClass(btns[currentCategoryIndex], "tv-focused");
           try {
             if(btns[currentCategoryIndex].scrollIntoView) {
-                btns[currentCategoryIndex].scrollIntoView({
-                  behavior: "smooth",
-                  inline: "center",
-                  block: "nearest"
-                });
+                btns[currentCategoryIndex].scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
             }
           } catch(err) {
-            if(btns[currentCategoryIndex].scrollIntoView) {
-                btns[currentCategoryIndex].scrollIntoView(false);
-            }
+            if(btns[currentCategoryIndex].scrollIntoView) btns[currentCategoryIndex].scrollIntoView(false);
           }
         }
       }
 
       function updateGridFocus() {
         var cards = document.querySelectorAll(".item-card");
-        for (var i = 0; i < cards.length; i++) {
-          rClass(cards[i], "tv-focused");
-        }
+        for (var i = 0; i < cards.length; i++) rClass(cards[i], "tv-focused");
         if (cards[currentGridIndex]) {
           aClass(cards[currentGridIndex], "tv-focused");
           try {
             if (cards[currentGridIndex].scrollIntoView) {
-                cards[currentGridIndex].scrollIntoView({
-                  behavior: "smooth",
-                  block: "nearest"
-                });
+                cards[currentGridIndex].scrollIntoView({ behavior: "smooth", block: "nearest" });
             }
           } catch(err) {
-            if (cards[currentGridIndex].scrollIntoView) {
-                cards[currentGridIndex].scrollIntoView(false);
-            }
+            if (cards[currentGridIndex].scrollIntoView) cards[currentGridIndex].scrollIntoView(false);
           }
         }
       }
@@ -1192,21 +1089,15 @@
       document.addEventListener("keydown", function (e) {
         triggerControlsOverlay();
 
-        if (
-          [37, 38, 39, 40].indexOf(e.keyCode) > -1 &&
-          document.activeElement.tagName !== "INPUT"
-        ) {
+        if ([37, 38, 39, 40].indexOf(e.keyCode) > -1 && document.activeElement.tagName !== "INPUT") {
           if(e.preventDefault) e.preventDefault();
         }
 
+        // PHYSICAL TV REMOVE CH +/- BUTTONS (Unaffected)
         if (e.keyCode === 427 || e.keyCode === 33 || e.key === "ChannelUp") {
           changeChannel(1);
           return;
-        } else if (
-          e.keyCode === 428 ||
-          e.keyCode === 34 ||
-          e.key === "ChannelDown"
-        ) {
+        } else if (e.keyCode === 428 || e.keyCode === 34 || e.key === "ChannelDown") {
           changeChannel(-1);
           return;
         }
@@ -1215,25 +1106,28 @@
         var catBtns = document.querySelectorAll(".cat-btn");
         var cards = document.querySelectorAll(".item-card");
 
-        // UP
+        // UP ARROW
         if (e.keyCode === 38) {
           if (currentFocusArea === "grid") {
              if (currentGridIndex >= 3) {
               currentGridIndex -= 3;
               updateGridFocus();
             } else {
+              // Jump back up to Category row
               currentFocusArea = "category";
               for (var c1 = 0; c1 < cards.length; c1++) rClass(cards[c1], "tv-focused");
               updateCategoryFocus();
             }
           } else if (currentFocusArea === "category") {
+            // Jump back up to Search Bar
             currentFocusArea = "search";
             for (var b1 = 0; b1 < catBtns.length; b1++) rClass(catBtns[b1], "tv-focused");
             if(searchInput.focus) searchInput.focus();
             aClass(searchInput, "tv-focused");
           }
         }
-        // DOWN
+        
+        // DOWN ARROW
         else if (e.keyCode === 40) {
           if (currentFocusArea === "search") {
             if(searchInput.blur) searchInput.blur();
@@ -1241,6 +1135,7 @@
             currentFocusArea = "category";
             updateCategoryFocus();
           } else if (currentFocusArea === "category") {
+            // Jump down to grid, hover first item but DO NOT play
             if (cards.length > 0) {
               currentFocusArea = "grid";
               currentGridIndex = 0;
@@ -1250,43 +1145,44 @@
             if (currentGridIndex + 3 < cards.length) {
               currentGridIndex += 3;
               updateGridFocus();
+            } else {
+              currentGridIndex = cards.length - 1;
+              updateGridFocus();
             }
           }
         }
-        // LEFT
+        
+        // LEFT ARROW
         else if (e.keyCode === 37) {
           if (currentFocusArea === "category" && currentCategoryIndex > 0) {
             currentCategoryIndex--;
             updateCategoryFocus();
+            // Automatically switch category UI without auto-playing the video
             if(catBtns[currentCategoryIndex].click) catBtns[currentCategoryIndex].click(); 
           } else if (currentFocusArea === "grid" && currentGridIndex > 0) {
             currentGridIndex--;
             updateGridFocus();
           }
         }
-        // RIGHT
+        
+        // RIGHT ARROW
         else if (e.keyCode === 39) {
-          if (
-            currentFocusArea === "category" &&
-            currentCategoryIndex < catBtns.length - 1
-          ) {
+          if (currentFocusArea === "category" && currentCategoryIndex < catBtns.length - 1) {
             currentCategoryIndex++;
             updateCategoryFocus();
+            // Automatically switch category UI without auto-playing the video
             if(catBtns[currentCategoryIndex].click) catBtns[currentCategoryIndex].click(); 
-          } else if (
-            currentFocusArea === "grid" &&
-            currentGridIndex < cards.length - 1
-          ) {
+          } else if (currentFocusArea === "grid" && currentGridIndex < cards.length - 1) {
             currentGridIndex++;
             updateGridFocus();
           }
         }
-        // ENTER / OK BUTTON
+        
+        // ENTER / OK BUTTON (The absolute confirmation to play)
         else if (e.keyCode === 13) {
           if (currentFocusArea === "grid" && cards.length > 0) {
+            // Now the channel actually plays
             streamSource(displayItems[currentGridIndex]);
-          } else if (currentFocusArea === "category") {
-            if(catBtns[currentCategoryIndex].click) catBtns[currentCategoryIndex].click();
           } else if (currentFocusArea === "search") {
             if(searchInput.focus) searchInput.focus();
           }
