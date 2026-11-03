@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>AMSPRM</title>
+    <!-- warm up the connection to YouTube so its player starts a little faster -->
+    <link rel="preconnect" href="https://www.youtube.com" />
+    <link rel="dns-prefetch" href="https://i.ytimg.com" />
+    <link rel="dns-prefetch" href="https://www.google.com" />
     <!-- Font loads in the background (never blocks the page). Falls back to Arial if offline. -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
 
@@ -178,7 +182,7 @@
       var HLS_LIB_URL = "https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js";
       var cacheBuster = new Date().getTime();
       // NOTE: the old commit hash is removed from this link, so the website always reads the NEWEST version of the Gist.
-      var dataSourceUrl = "https://gist.githubusercontent.com/ayonpaulofficial-bit/0634edaf19b269aba5bf62523cc19e15/raw/sdyt.m3u?cb=" + cacheBuster;
+      var dataSourceUrl = "https://gist.githubusercontent.com/ayonpaulofficial-bit/0634edaf19b269aba5bf62523cc19e15/raw/3b6dc4ceabcc0408a0344875186028cbfdc67756/sdyt.m3u?cb=" + cacheBuster;
       var CACHE_KEY = "amsprm_playlist_v1";
       var LOAD_TIMEOUT = 20000;   // live channel must start within 20s, otherwise retry
       var LOAD_TIMEOUT_FILE = 35000; // video files / Drive may need longer to start
@@ -195,12 +199,20 @@
       var KEYS = {
         toggleMax: [460],   // CC button  -> maximize / minimize
         catPrev: [412],     // << rewind  -> previous section
-        catNext: [417]      // >> fast forward -> next section
+        catNext: [417],     // >> fast forward -> next section
+        pause: [19, 179],   // Pause button -> pause / play
+        play: [415],        // Play button  -> play
+        seekBack: [424, 177], // |<<  -> 5 seconds back
+        seekFwd: [425, 176]   // >>|  -> 5 seconds forward
       };
       var KEY_NAMES = {     // same buttons, by name (used by browsers that report names)
         toggleMax: ["ClosedCaptionToggle", "ClosedCaption", "Subtitle", "Captions"],
         catPrev: ["MediaRewind"],
-        catNext: ["MediaFastForward"]
+        catNext: ["MediaFastForward"],
+        pause: ["MediaPlayPause", "MediaPause", "Pause"],
+        play: ["MediaPlay"],
+        seekBack: ["MediaTrackPrevious"],
+        seekFwd: ["MediaTrackNext"]
       };
       var SHOW_KEYS = /[?&]keys=1/.test(window.location.search);
 
@@ -625,7 +637,14 @@
 
       // ---------- LINK TYPES (YouTube / Drive / files / pages / live streams) ----------
       function ytEmbedUrl(id) {
-        return "https://www.youtube.com/embed/" + id + "?autoplay=1&rel=0&playsinline=1";
+        var o = "";
+        try {
+          if (window.location.protocol.indexOf("http") === 0) {
+            o = "&origin=" + encodeURIComponent(window.location.origin || (window.location.protocol + "//" + window.location.host));
+          }
+        } catch (e) {}
+        // enablejsapi=1 lets the remote's Pause / 5-second buttons control the YouTube player
+        return "https://www.youtube.com/embed/" + id + "?autoplay=1&rel=0&playsinline=1&controls=1&fs=1&iv_load_policy=3&enablejsapi=1" + o;
       }
 
       function driveSource(id) {
@@ -672,6 +691,7 @@
       }
 
       function removeEmbed() {
+        embedIsYt = false;
         if (embedFrame) {
           try { embedFrame.src = "about:blank"; } catch (e) {}
           if (embedFrame.parentNode) { embedFrame.parentNode.removeChild(embedFrame); }
@@ -683,21 +703,120 @@
       function showEmbed(url, item, token) {
         if (token !== playToken) return;
         clearPlaybackTimers();
-        hideStatus();
         try { corePlayer.pause(); } catch (e) {}
         removeEmbed();
         corePlayer.style.display = "none";
+        embedIsYt = /youtube(?:-nocookie)?\.com\/embed\//i.test(url);
+        ytTime = 0; ytDuration = 0; ytState = -1;
+        showStatus("Loading " + item.name + "...");   // stays visible until the embedded player has loaded
         var f = document.createElement("iframe");
         f.setAttribute("allow", "autoplay; fullscreen; encrypted-media");
         f.setAttribute("allowfullscreen", "");
         f.setAttribute("frameborder", "0");
         f.setAttribute("scrolling", "no");
-        f.style.cssText = "width:100%;height:100%;border:0;background:#000;";
-        f.onload = function() { try { f.blur(); window.focus(); } catch (e) {} };   // keep the remote keys on this page
+        // absolute + 100% = always fills the whole player area (also on old TV browsers)
+        f.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;border:0;background:#000;";
+        f.onload = function() {
+          if (token !== playToken) return;
+          hideStatus();
+          try { f.blur(); window.focus(); } catch (e) {}   // keep the remote keys on this page
+          if (embedIsYt) { ytListen(); setTimeout(ytListen, 1000); setTimeout(ytListen, 2500); setTimeout(ytListen, 5000); }
+        };
         f.src = url;
         embedFrame = f;
         viewportSection.insertBefore(f, viewportSection.firstChild);
+        setTimeout(function() { if (token === playToken) hideStatus(); }, 20000);
       }
+
+      // ---------- EMBED PLAYER CONTROL (YouTube pause / seek, and keeping the remote keys on this page) ----------
+      var embedIsYt = false, ytTime = 0, ytDuration = 0, ytState = -1;
+
+      function ytSend(func, args) {
+        try {
+          if (embedFrame && embedFrame.contentWindow) {
+            embedFrame.contentWindow.postMessage(JSON.stringify({ event: "command", func: func, args: args || [] }), "*");
+          }
+        } catch (e) {}
+      }
+
+      function ytListen() {
+        try {
+          if (embedFrame && embedFrame.contentWindow) {
+            embedFrame.contentWindow.postMessage(JSON.stringify({ event: "listening", id: 1, channel: "widget" }), "*");
+          }
+        } catch (e) {}
+      }
+
+      // YouTube reports its time / state back through postMessage
+      window.addEventListener("message", function(ev) {
+        if (!embedIsYt || !ev.data || typeof ev.data !== "string") return;
+        if (!/(^|\.)youtube(-nocookie)?\.com$/.test(String(ev.origin).replace(/^https?:\/\//, ""))) return;
+        try {
+          var d = JSON.parse(ev.data);
+          var info = d && d.info;
+          if (!info) return;
+          if (typeof info.currentTime === "number") ytTime = info.currentTime;
+          if (typeof info.duration === "number" && info.duration > 0) ytDuration = info.duration;
+          if (typeof info.playerState === "number") ytState = info.playerState;
+        } catch (e) {}
+      });
+
+      // Pause button: pause <-> play.  force = "play" -> only plays
+      function togglePause(force) {
+        if (!activeChannel) return;
+        if (embedFrame) {
+          if (!embedIsYt) { showToast("Pause is not available for this player"); return; }
+          if (force === "play" || ytState === 2) { ytSend("playVideo"); ytState = 1; showToast("Play"); }
+          else { ytSend("pauseVideo"); ytState = 2; showToast("Paused"); }
+          return;
+        }
+        if (corePlayer.paused) { tryPlay(); showToast("Play"); }
+        else if (force !== "play") { try { corePlayer.pause(); } catch (e) {} showToast("Paused"); }
+      }
+
+      // |<< / >>| buttons: 5 seconds back / forward.
+      // Going back: when less than 3 seconds would be left before the start, it jumps to the very start (and stays there).
+      function seekBy(dir) {
+        if (!activeChannel) return;
+        var cur, dur, nt;
+        if (embedFrame) {
+          if (!embedIsYt) { showToast("Seeking is not available for this player"); return; }
+          cur = ytTime; dur = ytDuration;
+        } else {
+          cur = corePlayer.currentTime; dur = corePlayer.duration;
+          if (!dur || !isFinite(dur)) { showToast("Live channel - cannot skip"); return; }
+        }
+        if (dir < 0) {
+          if (cur <= 0.5) return;            // already at the start -> nothing happens
+          nt = cur - 5;
+          if (nt < 3) nt = 0;                // almost at the start -> go to the very beginning
+        } else {
+          nt = cur + 5;
+          if (dur > 0 && nt > dur) nt = dur;
+        }
+        if (embedFrame) { ytSend("seekTo", [nt, true]); ytTime = nt; }
+        else { try { corePlayer.currentTime = nt; } catch (e) {} }
+        showToast(dir < 0 ? "-5s" : "+5s");
+      }
+
+      // After a mouse click inside an embedded player the browser gives it the keyboard.
+      // Take it back, so channel / section / CC / Back buttons keep working.
+      function refocusPage() {
+        if (!embedFrame) return;
+        try {
+          if (document.activeElement === embedFrame) {
+            embedFrame.blur();
+            window.focus();
+            document.body.focus();
+          }
+        } catch (e) {}
+      }
+      document.body.setAttribute("tabindex", "-1");
+      document.body.style.outline = "none";
+      window.addEventListener("blur", function() {
+        if (embedFrame) { setTimeout(refocusPage, 60); setTimeout(refocusPage, 400); }
+      });
+      setInterval(refocusPage, 700);
 
       // ---------- PLAYBACK ENGINE ----------
       function tryPlay(isRetry) {
@@ -1137,6 +1256,12 @@
         // Rewind / Fast-forward buttons: previous / next section
         if (keyMatches(key, e, "catPrev")) { e.preventDefault(); changeSection(-1); return; }
         if (keyMatches(key, e, "catNext")) { e.preventDefault(); changeSection(1); return; }
+
+        // Pause button: pause / play.  |<< and >>| buttons: 5 seconds back / forward
+        if (keyMatches(key, e, "pause")) { e.preventDefault(); if (!e.repeat) { togglePause(); } return; }
+        if (keyMatches(key, e, "play")) { e.preventDefault(); togglePause("play"); return; }
+        if (keyMatches(key, e, "seekBack")) { e.preventDefault(); seekBy(-1); return; }
+        if (keyMatches(key, e, "seekFwd")) { e.preventDefault(); seekBy(1); return; }
 
         // Number keys: channel number of the current section (not while typing in the search box)
         if (e.target !== searchInput && !e.ctrlKey && !e.altKey && !e.metaKey &&
