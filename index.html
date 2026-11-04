@@ -705,9 +705,16 @@
       function removeEmbed() {
         embedIsYt = false;
         if (embedFrame) {
-          try { embedFrame.src = "about:blank"; } catch (e) {}
-          if (embedFrame.parentNode) { embedFrame.parentNode.removeChild(embedFrame); }
+          var old = embedFrame;
+          try { old.src = "about:blank"; } catch (e) {}
           embedFrame = null;
+          /* Vewd: delay the actual DOM removal by 350ms so the browser's garbage
+             collector can release the old iframe's memory BEFORE the element is
+             removed. Without this delay, repeated Drive/YouTube preview iframes
+             accumulate memory and eventually trigger "the application is large". */
+          setTimeout(function() {
+            try { if (old.parentNode) { old.parentNode.removeChild(old); } } catch (e) {}
+          }, 350);
         }
         corePlayer.style.display = "";
       }
