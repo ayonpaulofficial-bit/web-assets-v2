@@ -208,6 +208,26 @@
         seekBack: [424, 177], // |<<  -> 5 seconds back
         seekFwd: [425, 176]   // >>|  -> 5 seconds forward
       };
+      /* Caption / subtitle cycling button:
+         Press once -> first subtitle language on, press again -> next language, ...
+         after the last language -> subtitles OFF, press again -> first language again.
+         Works only for HLS streams (hls.js subtitle tracks). For YouTube / Drive / embeds
+         shows "No subtitles available".
+
+         The button list below covers ALL common unused Sony Bravia remote buttons so the
+         smiley/face button on your remote should match one of them automatically.
+         If NONE of them work: open the page with ?keys=1 at the end of the address, press
+         your button, note the number shown on screen, and add it to the list below.
+
+         Codes included:
+           403 = Red color button
+           404 = Green color button
+           405 = Yellow color button
+           406 = Blue color button
+           413 = Teletext / Subtitle button
+           457 = Help / i-Manual / smiley button (most likely candidate)
+           458 = Settings / Action menu button */
+      KEYS.cycleSubtitle = [403, 404, 405, 406, 413, 457, 458];
       var KEY_NAMES = {     // same buttons, by name (used by browsers that report names)
         toggleMax: ["ClosedCaptionToggle", "ClosedCaption", "Subtitle", "Captions"],
         catPrev: ["MediaRewind"],
@@ -258,6 +278,7 @@
       var loadTimer = null, stallTimer = null, reloadTimer = null, retryTimer = null, switchTimer = null, logoTimer = null;
       var playToken = 0;        // every channel switch gets a new token -> old callbacks are ignored
       var gridToken = 0;
+      var hlsSubIndex = -1;     // current subtitle track index for cycleSubtitles (-1 = off)
       var currentAttempt = 0;
       var initialLoad = true;
       var isMax = false, nativeFs = false;
@@ -818,6 +839,40 @@
         showToast(dir < 0 ? "-5s" : "+5s");
       }
 
+      // ---------- SUBTITLE CYCLE (HLS streams only) ----------
+      // Press the cycleSubtitle button: 1st language -> 2nd -> ... -> OFF -> 1st again.
+      // Works only when hls.js is playing (m3u8 streams that contain subtitle tracks).
+      // For YouTube / Drive / embeds -> "No subtitles available".
+      function cycleSubtitles() {
+        if (!activeChannel) return;
+        if (embedFrame) { showToast("Subtitles not available for this player"); return; }
+        if (!hlsPlayer) { showToast("No subtitles available"); return; }
+
+        var tracks = hlsPlayer.subtitleTracks || [];
+        if (tracks.length === 0) { showToast("No subtitles available"); return; }
+
+        hlsSubIndex++;
+        if (hlsSubIndex >= tracks.length) {
+          // cycled through all languages -> turn OFF
+          hlsSubIndex = -1;
+          try { hlsPlayer.subtitleTrack = -1; } catch (e) {}
+          showToast("Subtitles: OFF");
+        } else {
+          try { hlsPlayer.subtitleTrack = hlsSubIndex; } catch (e) {}
+          var t = tracks[hlsSubIndex];
+          var label = "";
+          if (t) {
+            // try to find a readable name
+            label = t.name || t.lang || "";
+            if (!label && t.id !== undefined) label = "Track " + (Number(t.id) + 1);
+            if (!label) label = "Track " + (hlsSubIndex + 1);
+          } else {
+            label = "Track " + (hlsSubIndex + 1);
+          }
+          showToast("Subtitles: " + label);
+        }
+      }
+
       // After a mouse click inside an embedded player the browser gives it the keyboard.
       // Take it back, so channel / section / CC / Back buttons keep working.
       function refocusPage() {
@@ -880,6 +935,7 @@
       function stopCurrent() {
         clearPlaybackTimers();
         removeEmbed();
+        hlsSubIndex = -1;       // reset subtitle cycle state for the next channel
         if (hlsPlayer) {
           try { hlsPlayer.destroy(); } catch (e) {}
           hlsPlayer = null;
@@ -1281,6 +1337,9 @@
         if (keyMatches(key, e, "play")) { e.preventDefault(); togglePause("play"); return; }
         if (keyMatches(key, e, "seekBack")) { e.preventDefault(); seekBy(-1); return; }
         if (keyMatches(key, e, "seekFwd")) { e.preventDefault(); seekBy(1); return; }
+
+        // Subtitle cycle button: cycles through available subtitle languages on HLS streams
+        if (keyMatches(key, e, "cycleSubtitle")) { e.preventDefault(); if (!e.repeat) { cycleSubtitles(); } return; }
 
         // Number keys: channel number of the current section (not while typing in the search box)
         if (e.target !== searchInput && !e.ctrlKey && !e.altKey && !e.metaKey &&
