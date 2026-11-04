@@ -731,15 +731,22 @@
         embedIsYt = false;
         if (embedFrame) {
           var old = embedFrame;
+          /* Vewd memory cleanup — THREE steps that must all happen:
+             1. Set src to about:blank  -> stops all network activity inside the iframe
+             2. Shrink to 0x0 + display:none -> forces the browser to STOP RENDERING the
+                iframe's content immediately (this is what the 350ms delay alone couldn't do).
+                Without this, the old iframe's video player keeps consuming GPU/CPU memory
+                even after src=about:blank, which eventually triggers "the application is large".
+             3. Remove allow/allowfullscreen attributes -> releases browser permissions.
+             4. Delay the actual DOM removal by 500ms -> gives Vewd's slow garbage collector
+                time to free the memory before a new iframe is created. */
           try { old.src = "about:blank"; } catch (e) {}
+          try { old.style.width = "0px"; old.style.height = "0px"; old.style.display = "none"; } catch (e) {}
+          try { old.removeAttribute("allow"); old.removeAttribute("allowfullscreen"); } catch (e) {}
           embedFrame = null;
-          /* Vewd: delay the actual DOM removal by 350ms so the browser's garbage
-             collector can release the old iframe's memory BEFORE the element is
-             removed. Without this delay, repeated Drive/YouTube preview iframes
-             accumulate memory and eventually trigger "the application is large". */
           setTimeout(function() {
             try { if (old.parentNode) { old.parentNode.removeChild(old); } } catch (e) {}
-          }, 350);
+          }, 500);
         }
         corePlayer.style.display = "";
       }
@@ -947,6 +954,11 @@
         corePlayer.onloadedmetadata = null;
         try {
           corePlayer.pause();
+          /* Vewd: explicitly set src to empty string BEFORE removeAttribute.
+             On old Chromium, removeAttribute("src") alone doesn't always release
+             the video decoder — the property still holds the old URL internally.
+             Setting src="" first forces the decoder to stop and release memory. */
+          corePlayer.src = "";
           corePlayer.removeAttribute("src");
           corePlayer.load();
         } catch (e) {}
@@ -965,8 +977,25 @@
         var token = playToken;
         stopCurrent();
 
-        // Drive file that does not play directly -> use the Drive preview player instead
+        // Drive file: retry the direct download FIRST (up to MAX_RETRIES), and only
+        // use the heavy preview iframe as an absolute last resort.
+        // PREVIOUSLY: the code fell back to the preview iframe on the FIRST failure,
+        // which loaded Google's heavy video player (lots of JavaScript) every time
+        // the direct file was slow. After several of these heavy iframe loads, Vewd's
+        // memory filled up and showed "the application is large" error.
+        // NOW: the direct file is retried (each retry calls stopCurrent() which cleans
+        // up memory first), so the heavy preview iframe is almost never needed.
         if (activeSource && activeSource.fallback) {
+          if (currentAttempt < MAX_RETRIES) {
+            currentAttempt++;
+            showStatus("Retrying " + item.name + "...");
+            clearTimeout(retryTimer);
+            retryTimer = setTimeout(function() {
+              if (token === playToken) startPlayback(item, token, currentAttempt);
+            }, 1500);
+            return;
+          }
+          // All retries failed -> use the Drive preview iframe (heavy, but better than nothing)
           var fb = activeSource.fallback;
           activeSource = { type: "embed", src: fb };
           showEmbed(fb, item, token);
