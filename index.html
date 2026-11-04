@@ -189,7 +189,7 @@
       var HLS_LIB_URL = "https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js";
       var cacheBuster = new Date().getTime();
       // NOTE: the old commit hash is removed from this link, so the website always reads the NEWEST version of the Gist.
-      var dataSourceUrl = "https://gist.githubusercontent.com/ayonpaulofficial-bit/0634edaf19b269aba5bf62523cc19e15/raw/92e1dea125db816dc8b038df874a072bd99bce09/sdyt.m3u?cb=" + cacheBuster;
+      var dataSourceUrl = "https://gist.githubusercontent.com/ayonpaulofficial-bit/0634edaf19b269aba5bf62523cc19e15/raw/3b7f025f815fb2ee349ce912a1b47d0b2d7c3d88/sdyt.m3u?cb=" + cacheBuster;
       var CACHE_KEY = "amsprm_playlist_v1";
       var LOAD_TIMEOUT = 20000;   // live channel must start within 20s, otherwise retry
       var LOAD_TIMEOUT_FILE = 35000; // video files / Drive may need longer to start
@@ -1115,6 +1115,34 @@
 
             thisHls.on(Hls.Events.MANIFEST_PARSED, function() {
               if (token !== playToken || thisHls !== hlsPlayer) return;
+              // Add subtitle track AFTER hls.js has set up the video element.
+              // Adding it before attachMedia doesn't work — hls.js clears the element.
+              // Adding it here (after manifest is parsed) + setting mode="showing"
+              // forces the browser to display the captions.
+              if (src.subtitle) {
+                try {
+                  // Remove old tracks first
+                  var oldT = corePlayer.querySelectorAll("track");
+                  for (var oi = 0; oi < oldT.length; oi++) {
+                    try { oldT[oi].parentNode.removeChild(oldT[oi]); } catch(e2) {}
+                  }
+                  var htrk = document.createElement("track");
+                  htrk.kind = "subtitles";
+                  htrk.label = "English";
+                  htrk.srclang = "en";
+                  htrk.src = src.subtitle;
+                  htrk.default = true;
+                  corePlayer.appendChild(htrk);
+                  // Force the track to show after a short delay (browser needs time to load the VTT)
+                  setTimeout(function() {
+                    try {
+                      if (corePlayer.textTracks.length > 0) {
+                        corePlayer.textTracks[0].mode = "showing";
+                      }
+                    } catch(e3) {}
+                  }, 1000);
+                } catch(e) {}
+              }
               tryPlay();
             });
             thisHls.on(Hls.Events.ERROR, function(event, data) {
@@ -1129,18 +1157,6 @@
             });
             thisHls.loadSource(targetUrl);
             thisHls.attachMedia(corePlayer);
-            // If the source has a subtitle URL (gcdn:...|SUBTITLE_URL), add a <track> element
-            if (src.subtitle) {
-              try {
-                var htrk = document.createElement("track");
-                htrk.kind = "subtitles";
-                htrk.label = "English";
-                htrk.srclang = "en";
-                htrk.src = src.subtitle;
-                htrk.setAttribute("default", "");
-                corePlayer.appendChild(htrk);
-              } catch(e) {}
-            }
           } else if (corePlayer.canPlayType && corePlayer.canPlayType("application/vnd.apple.mpegurl")) {
             corePlayer.src = targetUrl;
             try { corePlayer.load(); } catch (e) {}
