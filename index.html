@@ -189,7 +189,7 @@
       var HLS_LIB_URL = "https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js";
       var cacheBuster = new Date().getTime();
       // NOTE: the old commit hash is removed from this link, so the website always reads the NEWEST version of the Gist.
-      var dataSourceUrl = "https://gist.githubusercontent.com/ayonpaulofficial-bit/0634edaf19b269aba5bf62523cc19e15/raw/84d14b55634830f0276f465b9d2b66aeb87b6acd/sdyt.m3u?cb=" + cacheBuster;
+      var dataSourceUrl = "https://gist.githubusercontent.com/ayonpaulofficial-bit/0634edaf19b269aba5bf62523cc19e15/raw/92e1dea125db816dc8b038df874a072bd99bce09/sdyt.m3u?cb=" + cacheBuster;
       var CACHE_KEY = "amsprm_playlist_v1";
       var LOAD_TIMEOUT = 20000;   // live channel must start within 20s, otherwise retry
       var LOAD_TIMEOUT_FILE = 35000; // video files / Drive may need longer to start
@@ -696,13 +696,19 @@
         m = u.match(/^embed:(.+)$/i);
         if (m) return { type: "embed", src: m[1] };
 
+        // sub: prefix — plays a video file WITH a subtitle track.
+        // Format: sub:VIDEO_URL|SUBTITLE_URL
+        // The player adds a <track> element with the subtitle URL so captions show automatically.
+        m = u.match(/^sub:(.+?)\|(.+)$/i);
+        if (m) return { type: "file", src: m[1], subtitle: m[2] };
+
         // gcdn: prefix — generates an HLS manifest on-the-fly for gcdn.jsdzf.ltd .ts segments.
         // The .m3u8 manifest on gcdn.jsdzf.ltd is blocked (403), but individual .ts segments
         // are accessible (HTTP 200 + CORS). This handler creates a Blob URL with a generated
         // HLS playlist that lists all the .ts segment URLs, so hls.js can play them.
         // Usage: gcdn:tv:39990:304    (TV show, CDN ID 39990, 304 segments)
         //        gcdn:movie:43565:1850 (Movie,  CDN ID 43565, 1850 segments)
-        m = u.match(/^gcdn:(tv|movie):(\d+):(\d+)$/i);
+        m = u.match(/^gcdn:(tv|movie):(\d+):(\d+)(?:\|(.+))?$/i);
         if (m) {
           var gType = m[1], gId = m[2], gCount = parseInt(m[3], 10);
           var gLines = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-TARGETDURATION:11", "#EXT-X-PLAYLIST-TYPE:VOD"];
@@ -717,7 +723,9 @@
           try {
             var gBlob = new Blob([gLines.join("\n") + "\n"], { type: "application/vnd.apple.mpegurl" });
             var gUrl = URL.createObjectURL(gBlob);
-            return { type: "hls", src: gUrl };
+            var gResult = { type: "hls", src: gUrl };
+            if (m[4]) gResult.subtitle = m[4];  // optional subtitle URL after |
+            return gResult;
           } catch (e) {}
         }
 
@@ -882,6 +890,20 @@
       function cycleSubtitles() {
         if (!activeChannel) return;
         if (embedFrame) { showToast("Subtitles not available for this player"); return; }
+
+        // Native <track> subtitles — toggle on/off (works for both sub: prefix and gcdn:...|sub)
+        if (corePlayer.textTracks && corePlayer.textTracks.length > 0) {
+          var nt = corePlayer.textTracks[0];
+          if (nt.mode === "showing") {
+            nt.mode = "hidden";
+            showToast("Subtitles: OFF");
+          } else {
+            nt.mode = "showing";
+            showToast("Subtitles: " + (nt.label || "English"));
+          }
+          return;
+        }
+
         if (!hlsPlayer) { showToast("No subtitles available"); return; }
 
         var tracks = hlsPlayer.subtitleTracks || [];
@@ -977,6 +999,13 @@
           hlsPlayer = null;
         }
         corePlayer.onloadedmetadata = null;
+        // Remove old subtitle <track> elements (from sub: prefix videos)
+        try {
+          var oldTracks = corePlayer.querySelectorAll("track");
+          for (var oti = 0; oti < oldTracks.length; oti++) {
+            try { oldTracks[oti].parentNode.removeChild(oldTracks[oti]); } catch(e) {}
+          }
+        } catch(e) {}
         try {
           corePlayer.pause();
           corePlayer.removeAttribute("src");
@@ -1064,6 +1093,18 @@
         try {
           if (src.type === "file") {
             // normal video file (.mp4 etc.) -> the browser's own player
+            // If the source has a subtitle URL (sub: prefix), add a <track> element
+            if (src.subtitle) {
+              try {
+                var trk = document.createElement("track");
+                trk.kind = "subtitles";
+                trk.label = "English";
+                trk.srclang = "en";
+                trk.src = src.subtitle;
+                trk.setAttribute("default", "");
+                corePlayer.appendChild(trk);
+              } catch(e) {}
+            }
             corePlayer.src = targetUrl;
             try { corePlayer.load(); } catch (e) {}
             tryPlay();
@@ -1088,6 +1129,18 @@
             });
             thisHls.loadSource(targetUrl);
             thisHls.attachMedia(corePlayer);
+            // If the source has a subtitle URL (gcdn:...|SUBTITLE_URL), add a <track> element
+            if (src.subtitle) {
+              try {
+                var htrk = document.createElement("track");
+                htrk.kind = "subtitles";
+                htrk.label = "English";
+                htrk.srclang = "en";
+                htrk.src = src.subtitle;
+                htrk.setAttribute("default", "");
+                corePlayer.appendChild(htrk);
+              } catch(e) {}
+            }
           } else if (corePlayer.canPlayType && corePlayer.canPlayType("application/vnd.apple.mpegurl")) {
             corePlayer.src = targetUrl;
             try { corePlayer.load(); } catch (e) {}
