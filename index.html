@@ -189,7 +189,7 @@
       var HLS_LIB_URL = "https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js";
       var cacheBuster = new Date().getTime();
       // NOTE: the old commit hash is removed from this link, so the website always reads the NEWEST version of the Gist.
-      var dataSourceUrl = "https://gist.githubusercontent.com/ayonpaulofficial-bit/0634edaf19b269aba5bf62523cc19e15/raw/3b535021502343f9ef90e368564986f8fb10505f/sdyt.m3u?cb=" + cacheBuster;
+      var dataSourceUrl = "https://gist.githubusercontent.com/ayonpaulofficial-bit/0634edaf19b269aba5bf62523cc19e15/raw/84d14b55634830f0276f465b9d2b66aeb87b6acd/sdyt.m3u?cb=" + cacheBuster;
       var CACHE_KEY = "amsprm_playlist_v1";
       var LOAD_TIMEOUT = 20000;   // live channel must start within 20s, otherwise retry
       var LOAD_TIMEOUT_FILE = 35000; // video files / Drive may need longer to start
@@ -696,6 +696,31 @@
         m = u.match(/^embed:(.+)$/i);
         if (m) return { type: "embed", src: m[1] };
 
+        // gcdn: prefix — generates an HLS manifest on-the-fly for gcdn.jsdzf.ltd .ts segments.
+        // The .m3u8 manifest on gcdn.jsdzf.ltd is blocked (403), but individual .ts segments
+        // are accessible (HTTP 200 + CORS). This handler creates a Blob URL with a generated
+        // HLS playlist that lists all the .ts segment URLs, so hls.js can play them.
+        // Usage: gcdn:tv:39990:304    (TV show, CDN ID 39990, 304 segments)
+        //        gcdn:movie:43565:1850 (Movie,  CDN ID 43565, 1850 segments)
+        m = u.match(/^gcdn:(tv|movie):(\d+):(\d+)$/i);
+        if (m) {
+          var gType = m[1], gId = m[2], gCount = parseInt(m[3], 10);
+          var gLines = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-TARGETDURATION:11", "#EXT-X-PLAYLIST-TYPE:VOD"];
+          for (var gi = 0; gi < gCount; gi++) {
+            var gs = String(gi);
+            var gp = "";
+            for (var gj = gs.length; gj < 5; gj++) gp += "0";
+            gLines.push("#EXTINF:5.5,");
+            gLines.push("https://gcdn.jsdzf.ltd/" + gType + "/" + gId + "/" + gp + gs + ".ts");
+          }
+          gLines.push("#EXT-X-ENDLIST");
+          try {
+            var gBlob = new Blob([gLines.join("\n") + "\n"], { type: "application/vnd.apple.mpegurl" });
+            var gUrl = URL.createObjectURL(gBlob);
+            return { type: "hls", src: gUrl };
+          } catch (e) {}
+        }
+
         // YouTube
         m = u.match(/(?:youtube(?:-nocookie)?\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
         if (m) return { type: "embed", src: ytEmbedUrl(m[1]) };
@@ -954,11 +979,6 @@
         corePlayer.onloadedmetadata = null;
         try {
           corePlayer.pause();
-          /* Vewd: explicitly set src to empty string BEFORE removeAttribute.
-             On old Chromium, removeAttribute("src") alone doesn't always release
-             the video decoder — the property still holds the old URL internally.
-             Setting src="" first forces the decoder to stop and release memory. */
-          corePlayer.src = "";
           corePlayer.removeAttribute("src");
           corePlayer.load();
         } catch (e) {}
@@ -977,25 +997,8 @@
         var token = playToken;
         stopCurrent();
 
-        // Drive file: retry the direct download FIRST (up to MAX_RETRIES), and only
-        // use the heavy preview iframe as an absolute last resort.
-        // PREVIOUSLY: the code fell back to the preview iframe on the FIRST failure,
-        // which loaded Google's heavy video player (lots of JavaScript) every time
-        // the direct file was slow. After several of these heavy iframe loads, Vewd's
-        // memory filled up and showed "the application is large" error.
-        // NOW: the direct file is retried (each retry calls stopCurrent() which cleans
-        // up memory first), so the heavy preview iframe is almost never needed.
+        // Drive file that does not play directly -> use the Drive preview player instead
         if (activeSource && activeSource.fallback) {
-          if (currentAttempt < MAX_RETRIES) {
-            currentAttempt++;
-            showStatus("Retrying " + item.name + "...");
-            clearTimeout(retryTimer);
-            retryTimer = setTimeout(function() {
-              if (token === playToken) startPlayback(item, token, currentAttempt);
-            }, 1500);
-            return;
-          }
-          // All retries failed -> use the Drive preview iframe (heavy, but better than nothing)
           var fb = activeSource.fallback;
           activeSource = { type: "embed", src: fb };
           showEmbed(fb, item, token);
