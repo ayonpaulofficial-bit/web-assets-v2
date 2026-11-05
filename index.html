@@ -8,6 +8,11 @@
     <link rel="preconnect" href="https://www.youtube.com" />
     <link rel="dns-prefetch" href="https://i.ytimg.com" />
     <link rel="dns-prefetch" href="https://www.google.com" />
+    <!-- Archive.org CDN preconnect: warms up DNS + TCP + TLS so MP4 files start fast in Vewd -->
+    <link rel="preconnect" href="https://ia801506.us.archive.org" />
+    <link rel="preconnect" href="https://ia601506.us.archive.org" />
+    <link rel="preconnect" href="https://dn720400.ca.archive.org" />
+    <link rel="preconnect" href="https://ia801000.us.archive.org" />
     <!-- Font loads in the background (never blocks the page). Falls back to Arial if offline. -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
 
@@ -119,7 +124,7 @@
 
     <div class="main-container">
       <div class="viewport-section" id="viewportSection">
-        <video id="main-player" controls autoplay playsinline></video>
+        <video id="main-player" controls autoplay playsinline preload="auto"></video>
         <div class="channel-toast" id="channelToast">Channel Name</div>
         <div class="status-msg" id="statusMsg"></div>
 
@@ -142,7 +147,7 @@
             <button class="cat-btn" onclick="switchCategory('Spiritual', this)">Spiritual</button>
             <button class="cat-btn" onclick="switchCategory('Cartoon', this)">Cartoon</button>
             <button class="cat-btn" onclick="switchCategory('Cartoon Movies', this)">Cartoon Movies</button>
-            <button class="cat-btn" onclick="switchCategory('The Tom & Jerry Show', this)">The Tom & Jerry Show</button>
+            <button class="cat-btn" onclick="switchCategory('The Tom & Jerry Show (2014–2021)', this)">The Tom & Jerry Show (2014–2021)</button>
             <button class="cat-btn" onclick="switchCategory('Tom and Jerry Tales (2006–2008)', this)">Tom and Jerry Tales (2006–2008)</button>
             <button class="cat-btn" onclick="switchCategory('Tom and Jerry in New York (2021)', this)">Tom and Jerry in New York (2021)</button>
             <button class="cat-btn" onclick="switchCategory('Tom & Jerry Singapore (2023)', this)">Tom & Jerry Singapore (2023)</button>
@@ -155,7 +160,6 @@
             <button class="cat-btn" onclick="switchCategory('FILMS', this)">FILMS</button>
             <button class="cat-btn" onclick="switchCategory('Indian', this)">Indian</button>
             <button class="cat-btn" onclick="switchCategory('Others', this)">Others</button>
-            <button class="cat-btn" onclick="switchCategory('Otherr', this)">Others</button>
         </div>
 
         <div class="cat-nav-row">
@@ -190,7 +194,7 @@
       var HLS_LIB_URL = "https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js";
       var cacheBuster = new Date().getTime();
       // NOTE: the old commit hash is removed from this link, so the website always reads the NEWEST version of the Gist.
-      var dataSourceUrl = "https://gist.githubusercontent.com/ayonpaulofficial-bit/0634edaf19b269aba5bf62523cc19e15/raw/ba32b833845c62e38845405bec59bff6dc30a9d9/sdyt.m3u?cb=" + cacheBuster;
+      var dataSourceUrl = "https://gist.githubusercontent.com/ayonpaulofficial-bit/0634edaf19b269aba5bf62523cc19e15/raw/3b535021502343f9ef90e368564986f8fb10505f/sdyt.m3u?cb=" + cacheBuster;
       var CACHE_KEY = "amsprm_playlist_v1";
       var LOAD_TIMEOUT = 20000;   // live channel must start within 20s, otherwise retry
       var LOAD_TIMEOUT_FILE = 35000; // video files / Drive may need longer to start
@@ -1106,9 +1110,59 @@
                 corePlayer.appendChild(trk);
               } catch(e) {}
             }
-            corePlayer.src = targetUrl;
-            try { corePlayer.load(); } catch (e) {}
-            tryPlay();
+            /* Fast-start for archive.org / CDN MP4 files (Vewd fix):
+               Vewd's old Chromium opens a NEW TCP+TLS connection for EVERY range
+               request the video element makes (HEAD → moov → mdat → ...), which is
+               why MP4 files take 10+ seconds to start while gcdn starts in 1s.
+
+               Fix: fire an XHR range request for the first 1 MB BEFORE setting
+               video.src. This does three things at once:
+                 1. Resolves DNS + opens TCP + TLS (warm connection)
+                 2. Downloads the moov atom (metadata at byte ~36)
+                 3. Stores those bytes in the browser's HTTP cache
+
+               When video.src is then set, the video element's own range requests
+               for the SAME bytes hit the HTTP cache → no new DNS/TCP/TLS → the
+               moov is available instantly → playback starts in 1-2 seconds,
+               the same speed as gcdn. */
+            try {
+              var preReq = new XMLHttpRequest();
+              preReq.open("GET", targetUrl, true);
+              preReq.setRequestHeader("Range", "bytes=0-1048575"); /* first 1 MB */
+              preReq.timeout = 7000;
+              preReq.onreadystatechange = function() {
+                /* As soon as headers arrive (readyState 2), the connection is warm.
+                   Set video.src immediately — no need to wait for the full 1 MB. */
+                if (preReq.readyState === 2 && token === playToken) {
+                  corePlayer.src = targetUrl;
+                  try { corePlayer.load(); } catch (e) {}
+                  tryPlay();
+                }
+              };
+              preReq.onload = function() {
+                /* Full 1 MB downloaded → moov atom is in HTTP cache.
+                   If video.src hasn't been set yet (slow CDN), set it now. */
+                if (token === playToken && !corePlayer.src) {
+                  corePlayer.src = targetUrl;
+                  try { corePlayer.load(); } catch (e) {}
+                  tryPlay();
+                }
+              };
+              preReq.onerror = preReq.ontimeout = function() {
+                /* Preload failed — fall back to normal loading */
+                if (token === playToken && !corePlayer.src) {
+                  corePlayer.src = targetUrl;
+                  try { corePlayer.load(); } catch (e) {}
+                  tryPlay();
+                }
+              };
+              preReq.send();
+            } catch(e) {
+              /* XHR not supported — normal loading */
+              corePlayer.src = targetUrl;
+              try { corePlayer.load(); } catch (e2) {}
+              tryPlay();
+            }
           } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
             var thisHls = new Hls(hlsConfig());
             hlsPlayer = thisHls;
